@@ -83,6 +83,4 @@ echo   ass   - Crear ticket de assessment
 echo.
 echo IMPORTANTE: Cerrá y reabrí la terminal para usar los comandos
 echo.
-echo Para desinstalar, ejecutá: uninstall.bat
-echo.
 pause
