@@ -22,6 +22,18 @@ copy /Y noc_deploy.py "%INSTALL_DIR%\"
 copy /Y assessment.py "%INSTALL_DIR%\"
 copy /Y requirements.txt "%INSTALL_DIR%\"
 
+if exist config.json (
+    copy /Y config.json "%INSTALL_DIR%\"
+) else (
+    (
+    echo {
+    echo   "noc_user": "CAMBIAR_POR_TU_USUARIO",
+    echo   "jira_responsable": "ramiro gomez"
+    echo }
+    ) > "%INSTALL_DIR%\config.json"
+    echo IMPORTANTE: Editá %INSTALL_DIR%\config.json con tu usuario NOC
+)
+
 REM Crear virtualenv
 echo 🐍 Creando entorno virtual...
 cd /d "%INSTALL_DIR%"
