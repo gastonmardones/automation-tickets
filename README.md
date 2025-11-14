@@ -2,7 +2,19 @@
 
 Scripts de automatización para creación de tickets en NOC, JIRA y Assessment.
 
+
+
 ## Instalación
+
+### Instalar Python
+**Linux:**
+```bash
+sudo apt update
+sudo apt install python3 python3-pip
+```
+
+**Windows:**
+Descargar desde https://www.python.org/downloads/
 
 ### Linux
 ```bash
