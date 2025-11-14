@@ -72,19 +72,6 @@ noc miba-login-api 1.0.0-RC1 qa
 ass miba-login-api 1.0.0-RC1
 ```
 
-## 🗑️ Desinstalar
-
-### Linux
-```bash
-cd automation-tickets
-./uninstall.sh
-```
-
-### Windows
-```batch
-cd automation-tickets
-uninstall.bat
-```
 
 ## 🔧 Actualizar
 ```bash
