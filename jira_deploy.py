@@ -2,6 +2,8 @@
 from playwright.sync_api import sync_playwright
 import sys
 import re
+import json
+import os
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
