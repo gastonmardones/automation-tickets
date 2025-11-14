@@ -22,6 +22,21 @@ cp noc_deploy.py "$INSTALL_DIR/"
 cp assessment.py "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
 
+# Copiar o crear config.json
+if [ -f "config.json" ]; then
+    echo "📝 Copiando config.json..."
+    cp config.json "$INSTALL_DIR/"
+else
+    echo "📝 Creando config.json de ejemplo..."
+    cat > "$INSTALL_DIR/config.json" << 'EOF'
+{
+  "noc_user": "cambiar por tu inicio de mail",
+  "jira_responsable": "ramiro gomez"
+}
+EOF
+    echo "IMPORTANTE: Editá ~/.automation-tickets/config.json con tu usuario NOC"
+fi
+
 # Crear virtualenv
 echo "Creando entorno virtual..."
 cd "$INSTALL_DIR"
