@@ -67,9 +67,9 @@ jira
 
 ### Modo rápido (con argumentos)
 ```bash
-jira backend 1.0.0 RC-1 1502048
-noc "Titulo del ticket" "Descripción completa"
-ass APPUSHESBA
+jira miba-login-api 1.0.0 RC-1 1502048
+noc miba-login-api 1.0.0-RC1 qa
+ass miba-login-api 1.0.0-RC1
 ```
 
 ## 🗑️ Desinstalar
@@ -112,7 +112,3 @@ El instalador:
 4. Los agrega al PATH automáticamente
 
 Así podés usar los comandos desde **cualquier directorio** sin activar virtualenvs manualmente.
-
-## 📞 Soporte
-
-Para reportar bugs o solicitar features: [Issues](https://github.com/gastonmardones/automation-tickets/issues)
