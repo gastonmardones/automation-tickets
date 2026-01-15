@@ -32,7 +32,9 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         selector = f'[data-fname="{label}"] .select2-choice'
         page.click(selector)
 
-        page.keyboard.type(valor)
+        # Escribir instantáneamente en el input de búsqueda de Select2
+        search_input = page.locator('.select2-input:visible, .select2-focused:visible').first
+        search_input.fill(valor)
 
         if esperar_sugerencia:
             # Esperar a que aparezca al menos una opción en el dropdown
