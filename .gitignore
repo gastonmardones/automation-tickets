@@ -30,6 +30,9 @@ ENV/
 noc_auth_state.json
 jira_auth_state.json
 
+browser_profile_noc/
+browser_profile_jira/
+
 # IDEs
 .vscode/
 .idea/

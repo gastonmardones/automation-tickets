@@ -1,8 +1,8 @@
 from playwright.sync_api import sync_playwright
 import sys
-
 import json
 import os
+import atexit
 
 # Cargar configuración
 def load_config():
@@ -23,30 +23,55 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         'prd': 'Producción'
     }
 
-    def seleccionar_select2(label, valor, delay=False):
+    # Rutas
+    base_dir = os.path.dirname(__file__)
+    browser_profile = os.path.join(base_dir, 'browser_profile_noc')
+    auth_state_file = os.path.join(base_dir, 'noc_auth_state.json')
+
+    def seleccionar_select2(label, valor, esperar_sugerencia=False):
         selector = f'[data-fname="{label}"] .select2-choice'
         page.click(selector)
-        
+
         page.keyboard.type(valor)
-        
-        if delay:
-            page.wait_for_timeout(delay)
-        
+
+        if esperar_sugerencia:
+            # Esperar a que aparezca al menos una opción en el dropdown
+            page.wait_for_selector(
+                '.select2-results li.select2-result-selectable',
+                timeout=30000
+            )
+
         page.keyboard.press('Enter')
-    
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, slow_mo=0)
-        try:
-            context = browser.new_context(storage_state="noc_auth_state.json")
-        except:
-            context = browser.new_context()
-        
+        # Usar contexto persistente
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=browser_profile,
+            headless=False,
+            slow_mo=0
+        )
+
+        # Cargar cookies guardadas si existen
+        if os.path.exists(auth_state_file):
+            with open(auth_state_file, 'r') as f:
+                state = json.load(f)
+                if state.get('cookies'):
+                    context.add_cookies(state['cookies'])
+
+        # Registrar cierre limpio al salir (incluyendo Ctrl+C)
+        def cleanup():
+            try:
+                context.close()
+            except:
+                pass
+
+        atexit.register(cleanup)
+
         page = context.new_page()
 
         page.goto("https://noc-mesa.buenosaires.gob.ar/WorkOrder.do?woMode=newWO&reqTemplate=9304")
         page.wait_for_load_state('domcontentloaded')
-        page.wait_for_timeout(100)
-        
+
         # Detectar si estamos logueados o se necesita login
         try:
             # Intentar encontrar el campo de solicitante (existe si estás logueado)
@@ -54,21 +79,22 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         except:
             # No encontró el formulario, debe estar en login
             print("Sesión expirada. Se requiere login manual")
-            
-            # Esperar automáticamente a que aparezca el formulario (60 segundos)
+
+            # Esperar a que el usuario se loguee (sin límite de tiempo)
             try:
-                page.wait_for_selector('[data-fname="requester"]', timeout=60000)
-                context.storage_state(path="noc_auth_state.json")
+                page.wait_for_selector('[data-fname="requester"]', timeout=0)
+                # Guardar sesión explícitamente (funciona incluso con Ctrl+C después)
+                context.storage_state(path=auth_state_file)
                 print("Sesión guardada.")
             except:
                 print("No hubo login")
                 context.close()
                 return
-        
+
         page.wait_for_timeout(500)
-    
+
         # === SOLICITANTE ===
-        seleccionar_select2('requester', config['noc_user'], delay=5500)
+        seleccionar_select2('requester', config['noc_user'], esperar_sugerencia=True)
         
         # === MINISTERIO/REPARTICION ===
         seleccionar_select2('level', 'ASI')
@@ -109,7 +135,7 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         page.fill('#for_udf_fields\\.udf_sline_902', version)
         
         # === ASUNTO ===
-        asunto = f"Deploy {ambiente.upper()} {componente} v{version}"
+        asunto = f"Deploy {ambiente.upper()} {componente} {version}"
         page.fill('#for_subject', asunto)
         
         # === DESCRIPCION ===
@@ -121,7 +147,7 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         
         url_linea = f'<br><br><a href="{url}" target="_blank">{url}</a><br><br>' if url else ''
         
-        descripcion = f'''<div>Buenas,<br><br>{linea_fecha_hora}</div><div>Solicito deploy en {ambiente.upper()} del componente {componente} v{version}{url_linea}<br>Quedo atento, gracias<br><br></div>'''
+        descripcion = f'''<div>Buenas,<br><br>{linea_fecha_hora}</div><div>Solicito deploy en {ambiente.upper()} del componente {componente} {version}{url_linea}<br>Quedo atento, gracias<br><br></div>'''
 
 
         description_frame = page.frame_locator('iframe.ze_area').first
@@ -132,15 +158,35 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         ''')
     
         page.click('input[value="DEPLOY STANDARD"]')
-        
+
         if fecha and hora:
             print(f"  Deploy programado: {fecha} a las {hora}hs")
         if url:
             print(f"  URL: {url}")
 
-      
-        
-        input("\n[Presioná Enter para cerrar el navegador...]")
+        print("\n[Cerrá el navegador o presioná Enter para finalizar...]")
+
+        # Esperar cierre del navegador o Enter del usuario
+        import threading
+        closed = threading.Event()
+
+        def on_close():
+            closed.set()
+
+        page.on('close', on_close)
+
+        # También permitir cerrar con Enter
+        def wait_input():
+            try:
+                input()
+                closed.set()
+            except:
+                pass
+
+        input_thread = threading.Thread(target=wait_input, daemon=True)
+        input_thread.start()
+
+        closed.wait()
         context.close()
 
 def main():

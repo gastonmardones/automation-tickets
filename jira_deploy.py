@@ -4,6 +4,7 @@ import sys
 import re
 import json
 import os
+import atexit
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -16,7 +17,14 @@ def load_config():
 config = load_config()
 
 def crear_ticket_jira(componente, version, tag, ticket_noc):
-    
+
+    # Rutas
+    base_dir = os.path.dirname(__file__)
+    noc_profile = os.path.join(base_dir, 'browser_profile_noc')
+    jira_profile = os.path.join(base_dir, 'browser_profile_jira')
+    noc_auth_file = os.path.join(base_dir, 'noc_auth_state.json')
+    jira_auth_file = os.path.join(base_dir, 'jira_auth_state.json')
+
     def normalizar_tag(tag):
         match = re.match(r'([A-Z]+)-?(\d+)', tag.upper())
         if match:
@@ -24,48 +32,76 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             numero = int(match.group(2))
             return f"{prefijo}-{numero:02d}"
         return tag
-    
+
+    # Variable para rastrear el contexto activo (para cleanup)
+    active_context = [None]  # Lista para poder modificar desde closure
+
+    def cleanup():
+        try:
+            if active_context[0]:
+                active_context[0].close()
+        except:
+            pass
+
+    atexit.register(cleanup)
+
     with sync_playwright() as p:
         print("=== PASO 1: Obtener datos del ticket NOC ===\n")
-        
-        noc_browser = None
+
+        noc_url = f"https://noc-mesa.buenosaires.gob.ar/WorkOrder.do?woMode=viewWO&woID={ticket_noc}"
+
+        # Intentar primero en modo headless con el perfil persistente
+        noc_context = None
         try:
-            noc_browser = p.chromium.launch(headless=True)
-            noc_context = noc_browser.new_context(storage_state="noc_auth_state.json")
+            noc_context = p.chromium.launch_persistent_context(
+                user_data_dir=noc_profile,
+                headless=True
+            )
+            # Cargar cookies guardadas si existen
+            if os.path.exists(noc_auth_file):
+                with open(noc_auth_file, 'r') as f:
+                    state = json.load(f)
+                    if state.get('cookies'):
+                        noc_context.add_cookies(state['cookies'])
+            active_context[0] = noc_context
             noc_page = noc_context.new_page()
-            noc_url = f"https://noc-mesa.buenosaires.gob.ar/WorkOrder.do?woMode=viewWO&woID={ticket_noc}"
-            
+
             noc_page.goto(noc_url, timeout=30000)
             noc_page.wait_for_load_state('domcontentloaded')
-            
+
             noc_page.wait_for_selector('#req-desc-body', timeout=5000)
             print("Sesión NOC válida")
-            
+
         except:
             print("Sesión NOC expirada o no existe. Abriendo navegador visible para login...")
-            if noc_browser:
-                noc_browser.close()
-            
-            noc_browser = p.chromium.launch(headless=False)
-            try:
-                noc_context = noc_browser.new_context(storage_state="noc_auth_state.json")
-            except:
-                noc_context = noc_browser.new_context()
-            
+            if noc_context:
+                noc_context.close()
+
+            noc_context = p.chromium.launch_persistent_context(
+                user_data_dir=noc_profile,
+                headless=False
+            )
+            # Cargar cookies guardadas si existen
+            if os.path.exists(noc_auth_file):
+                with open(noc_auth_file, 'r') as f:
+                    state = json.load(f)
+                    if state.get('cookies'):
+                        noc_context.add_cookies(state['cookies'])
+            active_context[0] = noc_context
             noc_page = noc_context.new_page()
-            noc_url = f"https://noc-mesa.buenosaires.gob.ar/WorkOrder.do?woMode=viewWO&woID={ticket_noc}"
-            
+
             noc_page.goto(noc_url)
             noc_page.wait_for_load_state('domcontentloaded')
-            
+
             try:
-                noc_page.wait_for_selector('#req-desc-body', timeout=60000)
-                noc_context.storage_state(path="noc_auth_state.json")
-                
+                noc_page.wait_for_selector('#req-desc-body', timeout=0)
+                noc_context.storage_state(path=noc_auth_file)
+                print("Sesión NOC guardada.")
+
                 noc_page.goto(noc_url)
                 noc_page.wait_for_load_state('domcontentloaded')
             except:
-                noc_browser.close()
+                noc_context.close()
                 return
         
         # Extraer descripción
@@ -73,7 +109,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             descripcion_elemento = noc_page.locator('#req-desc-body')
             descripcion = descripcion_elemento.inner_text()
         except Exception as e:
-            descripcion = f"Deploy {componente} {version}"
+            descripcion = f"Deploy {componente} {version}-{tag}"
         
         # Extraer URL GIT
         url_git = ""
@@ -86,24 +122,29 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             print(f"No se encontró URL GIT: {e}")
         
         print("\nDatos extraídos del NOC")
-        
-        noc_browser.close()
-        
+
+        noc_context.close()
+
         # PASO 2: Crear ticket en JIRA
-        
-        browser = p.chromium.launch(headless=False)
-        
-        try:
-            jira_context = browser.new_context(storage_state="jira_auth_state.json")
-        except:
-            jira_context = browser.new_context()
-        
+
+        jira_context = p.chromium.launch_persistent_context(
+            user_data_dir=jira_profile,
+            headless=False
+        )
+        # Cargar cookies guardadas si existen
+        if os.path.exists(jira_auth_file):
+            with open(jira_auth_file, 'r') as f:
+                state = json.load(f)
+                if state.get('cookies'):
+                    jira_context.add_cookies(state['cookies'])
+        active_context[0] = jira_context
+
         jira_page = jira_context.new_page()
         create_issue_url = "https://asijira.buenosaires.gob.ar/secure/CreateIssue!default.jspa"
-        
+
         jira_page.goto(create_issue_url)
         jira_page.wait_for_load_state('domcontentloaded')
-        
+
         # Verificar si aparece página de error de permisos
         try:
             error_msg = jira_page.locator('.aui-message-warning:has-text("No estás registrado")')
@@ -112,20 +153,20 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                 jira_page.wait_for_load_state('domcontentloaded')
         except:
             pass
-        
+
         # Verificar login
         try:
             jira_page.wait_for_selector('#project-field, #pid', timeout=5000)
         except:
             try:
-                jira_page.wait_for_selector('#project-field, #pid', timeout=60000)
-                jira_context.storage_state(path="jira_auth_state.json")
-                
+                jira_page.wait_for_selector('#project-field, #pid', timeout=0)
+                jira_context.storage_state(path=jira_auth_file)
+                print("Sesión JIRA guardada.")
+
                 jira_page.goto(create_issue_url)
                 jira_page.wait_for_load_state('domcontentloaded')
             except:
                 jira_context.close()
-                browser.close()
                 return
         
         jira_page.evaluate("""
@@ -225,7 +266,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                 print("Dejando el campo componente vacío")
         
         # Resumen
-        resumen = f"Deploy {componente} {version}" if componente else f"Deploy {version}"
+        resumen = f"Deploy {componente} {version}-{tag}" if componente else f"Deploy {version}-{tag}"
         jira_page.locator('#summary').click()
         jira_page.locator('#summary').fill(resumen)
         
@@ -341,10 +382,31 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             """)
             
             jira_page.wait_for_selector('#modal-recordatorio', state='detached', timeout=300000)
-        
-        input("\nPresioná Enter para cerrar el navegador...")
+
+        print("\n[Cerrá el navegador o presioná Enter para finalizar...]")
+
+        # Esperar cierre del navegador o Enter del usuario
+        import threading
+        closed = threading.Event()
+
+        def on_close():
+            closed.set()
+
+        jira_page.on('close', on_close)
+
+        # También permitir cerrar con Enter
+        def wait_input():
+            try:
+                input()
+                closed.set()
+            except:
+                pass
+
+        input_thread = threading.Thread(target=wait_input, daemon=True)
+        input_thread.start()
+
+        closed.wait()
         jira_context.close()
-        browser.close()
 
 def main():
     
