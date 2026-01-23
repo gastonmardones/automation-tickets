@@ -36,12 +36,11 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         search_input = page.locator('.select2-input:visible, .select2-focused:visible').first
         search_input.fill(valor)
 
-        if esperar_sugerencia:
-            # Esperar a que aparezca al menos una opción en el dropdown
-            page.wait_for_selector(
-                '.select2-results li.select2-result-selectable',
-                timeout=30000
-            )
+        # Siempre esperar a que aparezca al menos una opción en el dropdown
+        page.wait_for_selector(
+            '.select2-results li.select2-result-selectable',
+            timeout=30000 if esperar_sugerencia else 5000
+        )
 
         page.keyboard.press('Enter')
 
