@@ -32,15 +32,18 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         selector = f'[data-fname="{label}"] .select2-choice'
         page.click(selector)
 
-        # Escribir instantáneamente en el input de búsqueda de Select2
-        search_input = page.locator('.select2-input:visible, .select2-focused:visible').first
-        search_input.fill(valor)
+        # Escribir con keyboard.type para que Select2 dispare la búsqueda
+        page.keyboard.type(valor, delay=10)
 
-        # Siempre esperar a que aparezca al menos una opción en el dropdown
-        page.wait_for_selector(
-            '.select2-results li.select2-result-selectable',
-            timeout=30000 if esperar_sugerencia else 5000
-        )
+        if esperar_sugerencia:
+            # Esperar a que aparezca al menos una opción en el dropdown (para campos que consultan backend)
+            page.wait_for_selector(
+                '.select2-results li.select2-result-selectable',
+                timeout=30000
+            )
+        else:
+            # Pequeña espera para que Select2 procese
+            page.wait_for_timeout(300)
 
         page.keyboard.press('Enter')
 
