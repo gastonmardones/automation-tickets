@@ -72,10 +72,8 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             active_context[0] = noc_context
             noc_page = noc_context.new_page()
 
-            noc_page.goto(noc_url, timeout=30000)
-            noc_page.wait_for_load_state('domcontentloaded')
-
-            noc_page.wait_for_selector('#req-desc-body', timeout=5000)
+            noc_page.goto(noc_url, timeout=30000, wait_until='commit')
+            noc_page.wait_for_selector('#req-desc-body', timeout=15000)
             print("Sesión NOC válida")
 
         except:
@@ -99,8 +97,8 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             noc_page.wait_for_load_state('domcontentloaded')
 
             try:
-                noc_page.wait_for_selector('input[name="loginName"]', timeout=3000)
-                noc_page.fill('input[name="loginName"]', config.get('cuit', ''))
+                noc_page.wait_for_selector('#username', timeout=3000)
+                noc_page.fill('#username', config.get('cuit', ''))
                 print("Usuario NOC completado. Ingresá tu contraseña en el navegador.")
             except:
                 print("Completá tus credenciales NOC en el navegador.")
@@ -288,12 +286,16 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         jira_page.locator('#summary').click()
         jira_page.locator('#summary').fill(resumen)
         
-        # Descripción
-        try:
-            jira_page.locator('li[data-mode="source"] button').click()
-            jira_page.locator('#description').fill(descripcion)
-        except Exception as e:
-            print(f"No se pudo llenar descripción: {e}")
+        # Descripción — inyecta directo en el textarea del wiki editor
+        descripcion_escaped = descripcion.replace('\\', '\\\\').replace('`', '\\`')
+        jira_page.evaluate(f"""() => {{
+            const ta = document.getElementById('description');
+            if (ta) {{
+                ta.value = `{descripcion_escaped}`;
+                ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+                ta.dispatchEvent(new Event('change', {{bubbles: true}}));
+            }}
+        }}""")
         
         # Versión
         jira_page.locator('#fixVersions-textarea').click()

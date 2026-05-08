@@ -68,8 +68,8 @@ def crear_ticket_assessment(componente, version, ambiente, url=""):
         except:
             print("Sesión expirada. Iniciando login...")
             try:
-                page.wait_for_selector('input[name="loginName"]', timeout=3000)
-                page.fill('input[name="loginName"]', config.get('cuit', ''))
+                page.wait_for_selector('#username', timeout=3000)
+                page.fill('#username', config.get('cuit', ''))
                 print("Usuario completado. Ingresá tu contraseña en el navegador y hacé click en Iniciar sesión.")
             except:
                 print("Completá tus credenciales en el navegador.")
