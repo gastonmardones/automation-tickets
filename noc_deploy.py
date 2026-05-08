@@ -32,8 +32,7 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         selector = f'[data-fname="{label}"] .select2-choice'
         page.click(selector)
 
-        # Escribir con keyboard.type para que Select2 dispare la búsqueda
-        page.keyboard.type(valor, delay=10)
+        page.keyboard.type(valor, delay=0)
 
         if esperar_sugerencia:
             # Esperar a que aparezca al menos una opción en el dropdown (para campos que consultan backend)
@@ -81,13 +80,16 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
             # Intentar encontrar el campo de solicitante (existe si estás logueado)
             page.wait_for_selector('[data-fname="requester"]', timeout=5000)
         except:
-            # No encontró el formulario, debe estar en login
-            print("Sesión expirada. Se requiere login manual")
+            print("Sesión expirada. Iniciando login...")
+            try:
+                page.wait_for_selector('input[name="loginName"]', timeout=3000)
+                page.fill('input[name="loginName"]', config.get('cuit', ''))
+                print("Usuario completado. Ingresá tu contraseña en el navegador y hacé click en Iniciar sesión.")
+            except:
+                print("Completá tus credenciales en el navegador.")
 
-            # Esperar a que el usuario se loguee (sin límite de tiempo)
             try:
                 page.wait_for_selector('[data-fname="requester"]', timeout=0)
-                # Guardar sesión explícitamente (funciona incluso con Ctrl+C después)
                 context.storage_state(path=auth_state_file)
                 print("Sesión guardada.")
             except:
@@ -202,7 +204,7 @@ def main():
         parser = argparse.ArgumentParser()
         parser.add_argument('componente')
         parser.add_argument('version')
-        parser.add_argument('ambiente', choices=['dev', 'qa', 'hml', 'prod'])
+        parser.add_argument('ambiente', choices=['dev', 'qa', 'hml', 'prd'])
         parser.add_argument('url', nargs='?', default='')
         parser.add_argument('fecha', nargs='?', default=None)
         parser.add_argument('hora', nargs='?', default=None)
@@ -214,9 +216,9 @@ def main():
         # Preguntar interactivamente
         componente = input("Componente: ").strip()
         version = input("Versión: ").strip()
-        print("\nAmbientes disponibles: qa, hml, prd")
+        print("\nAmbientes disponibles: dev, qa, hml, prd")
         ambiente = input("Ambiente: ").strip().lower()
-        while ambiente not in ['qa', 'hml', 'prd']:
+        while ambiente not in ['dev', 'qa', 'hml', 'prd']:
             print("Ambiente inválido. Usá: qa, hml o prd")
             ambiente = input("Ambiente: ").strip().lower()
         url = input("URL (opcional, Enter para omitir): ").strip()

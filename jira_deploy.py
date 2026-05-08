@@ -26,7 +26,13 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
     jira_auth_file = os.path.join(base_dir, 'jira_auth_state.json')
 
     def normalizar_tag(tag):
-        match = re.match(r'([A-Z]+)-?(\d+)', tag.upper())
+        tag_upper = tag.upper().strip()
+        if tag_upper == 'RC':
+            return 'RC-1'
+        if tag_upper in ('HOTFIX', 'FIX'):
+            return 'FIX-1'
+        # fallback formato viejo: RC-1, RC-01, etc.
+        match = re.match(r'([A-Z]+)-?(\d+)', tag_upper)
         if match:
             prefijo = match.group(1)
             numero = int(match.group(2))
@@ -73,7 +79,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             print("Sesión NOC válida")
 
         except:
-            print("Sesión NOC expirada o no existe. Abriendo navegador visible para login...")
+            print("Sesión NOC expirada. Abriendo navegador para login...")
             if noc_context:
                 noc_context.close()
 
@@ -81,7 +87,6 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                 user_data_dir=noc_profile,
                 headless=False
             )
-            # Cargar cookies guardadas si existen
             if os.path.exists(noc_auth_file):
                 with open(noc_auth_file, 'r') as f:
                     state = json.load(f)
@@ -92,6 +97,13 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
 
             noc_page.goto(noc_url)
             noc_page.wait_for_load_state('domcontentloaded')
+
+            try:
+                noc_page.wait_for_selector('input[name="loginName"]', timeout=3000)
+                noc_page.fill('input[name="loginName"]', config.get('cuit', ''))
+                print("Usuario NOC completado. Ingresá tu contraseña en el navegador.")
+            except:
+                print("Completá tus credenciales NOC en el navegador.")
 
             try:
                 noc_page.wait_for_selector('#req-desc-body', timeout=0)
@@ -158,6 +170,13 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         try:
             jira_page.wait_for_selector('#project-field, #pid', timeout=5000)
         except:
+            try:
+                jira_page.wait_for_selector('#login-form-username', timeout=3000)
+                jira_page.fill('#login-form-username', config.get('cuit', ''))
+                print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
+            except:
+                print("Completá tus credenciales JIRA en el navegador.")
+
             try:
                 jira_page.wait_for_selector('#project-field, #pid', timeout=0)
                 jira_context.storage_state(path=jira_auth_file)
@@ -238,7 +257,6 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             jira_page.wait_for_selector('#summary', timeout=120000)
         except:
             jira_context.close()
-            browser.close()
             return
         
         # Componente - intentar seleccionar solo si existe exactamente
@@ -425,7 +443,7 @@ def main():
         
         componente = input("Componente: ").strip()
         version = input("Versión (ej: 1.0.0): ").strip()
-        tag = input("Tag (ej: RC-1 o RC-01): ").strip()
+        tag = input("Tag (RC o HOTFIX): ").strip()
         ticket_noc = input("Nro Ticket NOC: ").strip()
         
         crear_ticket_jira(
