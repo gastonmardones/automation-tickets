@@ -31,19 +31,13 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
     def seleccionar_select2(label, valor, esperar_sugerencia=False):
         selector = f'[data-fname="{label}"] .select2-choice'
         page.click(selector)
-
         page.keyboard.type(valor, delay=0)
-
-        if esperar_sugerencia:
-            # Esperar a que aparezca al menos una opción en el dropdown (para campos que consultan backend)
-            page.wait_for_selector(
-                '.select2-results li.select2-result-selectable',
-                timeout=30000
-            )
-        else:
-            # Pequeña espera para que Select2 procese
-            page.wait_for_timeout(300)
-
+        timeout = 30000 if esperar_sugerencia else 2000
+        try:
+            page.wait_for_selector('.select2-results li.select2-result-selectable', timeout=timeout)
+        except:
+            if not esperar_sugerencia:
+                page.wait_for_timeout(50)
         page.keyboard.press('Enter')
 
     with sync_playwright() as p:
