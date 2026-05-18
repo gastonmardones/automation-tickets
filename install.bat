@@ -77,6 +77,17 @@ pause
 exit /b 1
 
 :python_ok
+REM Verificar version de Python (necesitamos 3.9-3.13)
+for /f "tokens=2 delims=." %%a in ('%PYTHON% --version 2^>^&1') do set "PY_MINOR=%%a"
+if %PY_MINOR% GEQ 14 (
+    echo.
+    echo ADVERTENCIA: Python 3.%PY_MINOR% es muy nuevo, algunos paquetes pueden no tener
+    echo compatibilidad todavia. Se recomienda Python 3.12 para mayor estabilidad.
+    echo Descargalo desde: https://www.python.org/downloads/release/python-3127/
+    echo.
+    echo Presiona una tecla para continuar igual o Ctrl+C para cancelar...
+    pause > nul
+)
 echo.
 
 REM === PASO 4: Virtualenv ===
