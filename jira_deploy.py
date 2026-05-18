@@ -100,10 +100,12 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
 
             try:
                 noc_page.wait_for_selector('#username', timeout=5000)
-                noc_page.fill('#username', config.get('cuit', ''))
+                noc_page.locator('#username').click()
+                noc_page.keyboard.type(config.get('cuit', ''))
                 noc_password = config.get('noc_password', '')
                 if noc_password:
                     noc_page.fill('#password', noc_password)
+                    noc_page.wait_for_timeout(300)
                     noc_page.click('#loginSDPage')
                     print("Credenciales NOC completadas automáticamente.")
                 else:
@@ -179,7 +181,14 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             try:
                 jira_page.wait_for_selector('#login-form-username', timeout=3000)
                 jira_page.fill('#login-form-username', config.get('cuit', ''))
-                print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
+                noc_password = config.get('noc_password', '')
+                if noc_password:
+                    jira_page.fill('#login-form-password', noc_password)
+                    jira_page.wait_for_timeout(300)
+                    jira_page.click('#login-form-submit')
+                    print("Credenciales JIRA completadas automáticamente.")
+                else:
+                    print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
             except:
                 print("Completá tus credenciales JIRA en el navegador.")
 

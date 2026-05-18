@@ -67,11 +67,13 @@ def crear_ticket_assessment(componente, version, ambiente, url=""):
 
         if page.locator('#username').count() > 0:
             print("Sesión expirada. Iniciando login...")
-            page.fill('#username', config.get('cuit', ''))
+            page.locator('#username').click()
+            page.keyboard.type(config.get('cuit', ''))
 
             noc_password = config.get('noc_password', '')
             if noc_password:
                 page.fill('#password', noc_password)
+                page.wait_for_timeout(300)
                 page.click('#loginSDPage')
                 print("Credenciales completadas automáticamente.")
             else:

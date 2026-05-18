@@ -74,11 +74,14 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
 
         if page.locator('#username').count() > 0:
             print("Sesión expirada. Iniciando login...")
-            page.fill('#username', config.get('cuit', ''))
+            # type() en vez de fill() para disparar el onkeyup del form
+            page.locator('#username').click()
+            page.keyboard.type(config.get('cuit', ''))
 
             noc_password = config.get('noc_password', '')
             if noc_password:
                 page.fill('#password', noc_password)
+                page.wait_for_timeout(300)
                 page.click('#loginSDPage')
                 print("Credenciales completadas automáticamente.")
             else:
