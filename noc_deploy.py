@@ -78,9 +78,10 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
             page.locator('#username').click()
             page.keyboard.type(config.get('cuit', ''))
 
-            noc_password = config.get('noc_password', '')
+            noc_password = config.get('password', '')
             if noc_password:
-                page.fill('#password', noc_password)
+                page.locator('#password').click()
+                page.keyboard.type(noc_password)
                 page.wait_for_timeout(300)
                 page.click('#loginSDPage')
                 print("Credenciales completadas automáticamente.")
@@ -102,7 +103,7 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         page.wait_for_timeout(500)
 
         # === SOLICITANTE ===
-        seleccionar_select2('requester', config['noc_user'], esperar_sugerencia=True)
+        seleccionar_select2('requester', config['user'], esperar_sugerencia=True)
         
         # === MINISTERIO/REPARTICION ===
         seleccionar_select2('level', 'ASI')

@@ -49,18 +49,18 @@ Editá `~/.automation-tickets/config.json` con tus datos:
 
 ```json
 {
-  "noc_user": "tu_usuario_noc",
+  "user": "tu_usuario",
   "cuit": "20XXXXXXXXX0",
-  "noc_password": "",
+  "password": "",
   "jira_responsable": "nombre apellido"
 }
 ```
 
 | Campo | Obligatorio | Descripción |
 |-------|-------------|-------------|
-| `noc_user` | Sí | Tu usuario NOC (sin @buenosaires.gob.ar) |
-| `cuit` | Sí | CUIT para autologin cuando expira la sesión |
-| `noc_password` | No | Contraseña NOC. Si está vacío, la pedirá en el browser. **Guardarla acá es conveniente pero menos seguro.** |
+| `user` | Sí | Tu usuario NOC (usado para el campo Solicitante en los tickets) |
+| `cuit` | Sí | CUIT — se usa como usuario al hacer login en NOC y JIRA |
+| `password` | No | Contraseña de NOC/JIRA. Si está vacío, el browser la pide manualmente. **Guardarla acá es conveniente pero menos seguro.** |
 | `jira_responsable` | Sí | Nombre del responsable referente en JIRA |
 
 ### Sesiones
