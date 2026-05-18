@@ -5,6 +5,13 @@ echo ===================================================
 echo   Instalador de Automation Tickets
 echo ===================================================
 echo.
+echo IMPORTANTE: Si abriste esto con doble click, la ventana
+echo se cerrara al terminar. Para ver los errores, abri un CMD
+echo y ejecuta: install.bat
+echo.
+echo Iniciando en 3 segundos...
+timeout /t 3 /nobreak > nul
+echo.
 
 set "INSTALL_DIR=%USERPROFILE%\.automation-tickets"
 set "BIN_DIR=%USERPROFILE%\.local\bin"
@@ -110,5 +117,11 @@ echo   noc   - Crear ticket en NOC
 echo   ass   - Crear ticket de assessment
 echo.
 echo IMPORTANTE: Abre una NUEVA terminal para usar los comandos.
+echo.
+echo Verificando archivos instalados:
+if exist "%BIN_DIR%\noc.bat" (echo   OK: noc.bat) else (echo   ERROR: noc.bat no encontrado)
+if exist "%BIN_DIR%\jira.bat" (echo   OK: jira.bat) else (echo   ERROR: jira.bat no encontrado)
+if exist "%BIN_DIR%\ass.bat" (echo   OK: ass.bat) else (echo   ERROR: ass.bat no encontrado)
+if exist "%INSTALL_DIR%\venv\Scripts\python.exe" (echo   OK: virtualenv) else (echo   ERROR: virtualenv no encontrado)
 echo.
 pause
