@@ -64,19 +64,18 @@ echo call "%INSTALL_DIR%\venv\Scripts\activate.bat"
 echo python "%INSTALL_DIR%\assessment.py" %%*
 ) > "%BIN_DIR%\ass.bat"
 
-REM Agregar al PATH si no está
+REM Agregar al PATH usando PowerShell (evita truncacion de setx)
 echo.
 echo Verificando PATH...
-set "PATH_TO_ADD=%BIN_DIR%"
-echo %PATH% | findstr /C:"%PATH_TO_ADD%" >nul
-if errorlevel 1 (
-    echo ⚠️  IMPORTANTE: Agregando al PATH del usuario...
-    setx PATH "%PATH%;%PATH_TO_ADD%"
-    echo.
-    echo ⚠️  Cerrá y reabrí la terminal para que los comandos funcionen
-) else (
-    echo ✅ PATH configurado correctamente
-)
+powershell -NoProfile -Command ^
+  "$binDir = '%BIN_DIR%'; ^
+   $userPath = [Environment]::GetEnvironmentVariable('PATH','User'); ^
+   if ($userPath -notlike ('*' + $binDir + '*')) { ^
+     [Environment]::SetEnvironmentVariable('PATH', $userPath + ';' + $binDir, 'User'); ^
+     Write-Host 'PATH actualizado correctamente.' ^
+   } else { ^
+     Write-Host 'PATH ya estaba configurado.' ^
+   }"
 
 echo.
 echo ===================================================
