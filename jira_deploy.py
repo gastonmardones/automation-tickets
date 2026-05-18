@@ -176,7 +176,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             jira_page.wait_for_load_state('domcontentloaded')
             # Esperar login page con selector flexible (distintas versiones de JIRA)
             try:
-                jira_page.wait_for_selector('#username-field, #os_username, input[name="username"]', timeout=30000)
+                jira_page.wait_for_selector('#username-field, #os_username, input[name="username"]', timeout=10000)
             except:
                 print("No se pudo cargar la página de login de JIRA. Intentá loguearte manualmente en el browser.")
 
