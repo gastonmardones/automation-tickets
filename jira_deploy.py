@@ -136,7 +136,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         url_git = ""
         try:
             url_git_elem = noc_page.locator('p[data-name="udf_sline_11422"]')
-            url_git = url_git_elem.inner_text().strip()
+            url_git = url_git_elem.inner_text(timeout=2000).strip()
             if url_git:
                 print(f"URL GIT obtenida: {url_git}")
         except Exception as e:
@@ -323,9 +323,14 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         # Tag
         tag_normalizado = normalizar_tag(tag)
         try:
-            jira_page.locator('#customfield_11304').select_option(label=tag_normalizado)
+            jira_page.locator('#customfield_11304').select_option(label=tag_normalizado, timeout=5000)
         except Exception as e:
-            print(f"No se pudo seleccionar tag: {e}")
+            opciones = jira_page.evaluate("""
+                Array.from(document.querySelectorAll('#customfield_11304 option'))
+                    .filter(o => o.value)
+                    .map(o => o.text.trim())
+            """)
+            print(f"Tag '{tag_normalizado}' no encontrado. Opciones disponibles: {opciones}")
         
         # Responsable Referente
         jira_page.locator('#customfield_10187-field').click()
