@@ -25,13 +25,8 @@ copy /Y requirements.txt "%INSTALL_DIR%\"
 if exist config.json (
     copy /Y config.json "%INSTALL_DIR%\"
 ) else (
-    (
-    echo {
-    echo   "noc_user": "CAMBIAR_POR_TU_USUARIO",
-    echo   "jira_responsable": "ramiro gomez"
-    echo }
-    ) > "%INSTALL_DIR%\config.json"
-    echo IMPORTANTE: Editá %INSTALL_DIR%\config.json con tu usuario NOC
+    copy /Y config.example.json "%INSTALL_DIR%\config.json"
+    echo IMPORTANTE: Edita %INSTALL_DIR%\config.json con tus datos
 )
 
 REM Crear virtualenv
