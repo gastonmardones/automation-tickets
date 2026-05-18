@@ -28,9 +28,9 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
     def normalizar_tag(tag):
         tag_upper = tag.upper().strip()
         if tag_upper == 'RC':
-            return 'RC-1'
+            return 'RC-01'
         if tag_upper in ('HOTFIX', 'FIX'):
-            return 'FIX-1'
+            return 'FIX-01'
         # fallback formato viejo: RC-1, RC-01, etc.
         match = re.match(r'([A-Z]+)-?(\d+)', tag_upper)
         if match:
@@ -174,16 +174,29 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         if jira_page.locator('.aui-message-warning').count() > 0:
             jira_page.goto(login_url)
             jira_page.wait_for_load_state('domcontentloaded')
-            jira_page.wait_for_selector('#username-field', timeout=10000)
+            # Esperar login page con selector flexible (distintas versiones de JIRA)
+            try:
+                jira_page.wait_for_selector('#username-field, #os_username, input[name="username"]', timeout=30000)
+            except:
+                print("No se pudo cargar la página de login de JIRA. Intentá loguearte manualmente en el browser.")
 
         # Si estamos en login → llenar credenciales
+        jira_password = config.get('password', '')
         if jira_page.locator('#username-field').count() > 0:
             jira_page.fill('#username-field', config.get('cuit', ''))
-            jira_password = config.get('password', '')
             if jira_password:
                 jira_page.fill('#password-field', jira_password)
                 jira_page.wait_for_timeout(300)
                 jira_page.click('#login-button')
+                print("Credenciales JIRA completadas automáticamente.")
+            else:
+                print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
+        elif jira_page.locator('#os_username').count() > 0:
+            jira_page.fill('#os_username', config.get('cuit', ''))
+            if jira_password:
+                jira_page.fill('#os_password', jira_password)
+                jira_page.wait_for_timeout(300)
+                jira_page.locator('input[type="submit"]').click()
                 print("Credenciales JIRA completadas automáticamente.")
             else:
                 print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
