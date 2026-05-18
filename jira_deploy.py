@@ -72,8 +72,10 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             active_context[0] = noc_context
             noc_page = noc_context.new_page()
 
-            noc_page.goto(noc_url, timeout=30000, wait_until='commit')
-            noc_page.wait_for_selector('#req-desc-body', timeout=15000)
+            noc_page.goto(noc_url, timeout=30000, wait_until='domcontentloaded')
+            noc_page.wait_for_selector('#req-desc-body, #username', timeout=8000)
+            if noc_page.locator('#username').count() > 0:
+                raise Exception("login_required")
             print("Sesión NOC válida")
 
         except:
@@ -97,9 +99,15 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             noc_page.wait_for_load_state('domcontentloaded')
 
             try:
-                noc_page.wait_for_selector('#username', timeout=3000)
+                noc_page.wait_for_selector('#username', timeout=5000)
                 noc_page.fill('#username', config.get('cuit', ''))
-                print("Usuario NOC completado. Ingresá tu contraseña en el navegador.")
+                noc_password = config.get('noc_password', '')
+                if noc_password:
+                    noc_page.fill('#password', noc_password)
+                    noc_page.click('#loginSDPage')
+                    print("Credenciales NOC completadas automáticamente.")
+                else:
+                    print("Usuario NOC completado. Ingresá tu contraseña en el navegador.")
             except:
                 print("Completá tus credenciales NOC en el navegador.")
 

@@ -45,17 +45,29 @@ install.bat
 
 ## ⚙️ Configuración inicial
 
-Después de instalar, configurá tu usuario:
+Editá `~/.automation-tickets/config.json` con tus datos:
 
-Editá config.json con tu mail
-
-**config.json:**
 ```json
 {
-  "noc_user": "tu mail sin @buenosaires.gob.ar",
-  "jira_responsable": "ramiro gomez"
+  "noc_user": "tu_usuario_noc",
+  "cuit": "20XXXXXXXXX0",
+  "noc_password": "",
+  "jira_responsable": "nombre apellido"
 }
 ```
+
+| Campo | Obligatorio | Descripción |
+|-------|-------------|-------------|
+| `noc_user` | Sí | Tu usuario NOC (sin @buenosaires.gob.ar) |
+| `cuit` | Sí | CUIT para autologin cuando expira la sesión |
+| `noc_password` | No | Contraseña NOC. Si está vacío, la pedirá en el browser. **Guardarla acá es conveniente pero menos seguro.** |
+| `jira_responsable` | Sí | Nombre del responsable referente en JIRA |
+
+### Sesiones
+
+Los scripts guardan las sesiones de NOC y JIRA en el disco. Mientras la sesión sea válida (el servidor no la expire), el login es automático. Cuando expira:
+- Si `noc_password` está configurado → login automático completo
+- Si no → el browser se abre con el usuario pre-completado y solo tenés que escribir la contraseña
 
 ## 📝 Uso
 
@@ -79,10 +91,13 @@ jira
 
 ### Modo rápido (con argumentos)
 ```bash
-jira miba-login-api 1.0.0 RC-1 1502048
-noc miba-login-api 1.0.0-RC1 qa
-ass miba-login-api 1.0.0-RC1
+jira miba-login-api 1.0.0 RC 1502048
+noc miba-login-api 1.0.0-RC prd
+ass miba-login-api 1.0.0-RC qa
 ```
+
+**Ambientes válidos para `noc` y `ass`:** `dev`, `qa`, `hml`, `prd`
+**Tags válidos para `jira`:** `RC` → selecciona `RC-1` en el desplegable | `HOTFIX` → selecciona `FIX-1`
 
 
 ## 🔧 Actualizar

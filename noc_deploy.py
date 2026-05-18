@@ -69,23 +69,28 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         page.goto("https://noc-mesa.buenosaires.gob.ar/WorkOrder.do?woMode=newWO&reqTemplate=9304")
         page.wait_for_load_state('domcontentloaded')
 
-        # Detectar si estamos logueados o se necesita login
-        try:
-            # Intentar encontrar el campo de solicitante (existe si estás logueado)
-            page.wait_for_selector('[data-fname="requester"]', timeout=5000)
-        except:
+        # Detectar rápidamente si estamos en el form o en login
+        page.wait_for_selector('[data-fname="requester"], #username', timeout=10000)
+
+        if page.locator('#username').count() > 0:
             print("Sesión expirada. Iniciando login...")
-            try:
-                page.wait_for_selector('#username', timeout=3000)
-                page.fill('#username', config.get('cuit', ''))
-                print("Usuario completado. Ingresá tu contraseña en el navegador y hacé click en Iniciar sesión.")
-            except:
-                print("Completá tus credenciales en el navegador.")
+            page.fill('#username', config.get('cuit', ''))
+
+            noc_password = config.get('noc_password', '')
+            if noc_password:
+                page.fill('#password', noc_password)
+                page.click('#loginSDPage')
+                print("Credenciales completadas automáticamente.")
+            else:
+                print("Usuario completado. Ingresá tu contraseña en el navegador.")
 
             try:
                 page.wait_for_selector('[data-fname="requester"]', timeout=0)
                 context.storage_state(path=auth_state_file)
                 print("Sesión guardada.")
+                page.goto("https://noc-mesa.buenosaires.gob.ar/WorkOrder.do?woMode=newWO&reqTemplate=9304")
+                page.wait_for_load_state('domcontentloaded')
+                page.wait_for_selector('[data-fname="requester"]', timeout=10000)
             except:
                 print("No hubo login")
                 context.close()
@@ -157,8 +162,6 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
             }}
         ''')
     
-        page.click('input[value="DEPLOY STANDARD"]')
-
         if fecha and hora:
             print(f"  Deploy programado: {fecha} a las {hora}hs")
         if url:
