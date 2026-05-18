@@ -6,80 +6,102 @@ echo   Instalador de Automation Tickets
 echo ===================================================
 echo.
 
-REM Detectar directorio de instalación
 set "INSTALL_DIR=%USERPROFILE%\.automation-tickets"
 set "BIN_DIR=%USERPROFILE%\.local\bin"
 
-REM Crear directorios
-echo 📁 Creando directorios...
+echo Creando directorios...
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
 
-REM Copiar archivos
-echo 📦 Copiando archivos...
-copy /Y jira_deploy.py "%INSTALL_DIR%\"
-copy /Y noc_deploy.py "%INSTALL_DIR%\"
-copy /Y assessment.py "%INSTALL_DIR%\"
-copy /Y requirements.txt "%INSTALL_DIR%\"
+echo Copiando archivos...
+copy /Y jira_deploy.py "%INSTALL_DIR%\" > nul
+copy /Y noc_deploy.py "%INSTALL_DIR%\" > nul
+copy /Y assessment.py "%INSTALL_DIR%\" > nul
+copy /Y requirements.txt "%INSTALL_DIR%\" > nul
 
 if exist config.json (
-    copy /Y config.json "%INSTALL_DIR%\"
+    copy /Y config.json "%INSTALL_DIR%\" > nul
 ) else (
-    copy /Y config.example.json "%INSTALL_DIR%\config.json"
+    copy /Y config.example.json "%INSTALL_DIR%\config.json" > nul
     echo IMPORTANTE: Edita %INSTALL_DIR%\config.json con tus datos
 )
 
-REM Crear virtualenv
-echo 🐍 Creando entorno virtual...
+echo.
+echo Verificando Python...
+py --version > nul 2>&1
+if %errorlevel% == 0 (
+    set "PYTHON=py"
+    echo Python encontrado (launcher py).
+) else (
+    python --version > nul 2>&1
+    if %errorlevel% == 0 (
+        set "PYTHON=python"
+        echo Python encontrado.
+    ) else (
+        echo ERROR: Python no encontrado.
+        echo Instala Python desde https://www.python.org/downloads/
+        echo Asegurate de marcar "Add Python to PATH" durante la instalacion.
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo Creando entorno virtual...
 cd /d "%INSTALL_DIR%"
-python -m venv venv
+%PYTHON% -m venv venv
+if %errorlevel% neq 0 (
+    echo ERROR: No se pudo crear el entorno virtual.
+    pause
+    exit /b 1
+)
 
-REM Activar e instalar dependencias
-echo 📥 Instalando dependencias...
+echo Instalando dependencias...
 call venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip --quiet
+pip install -r requirements.txt --quiet
+if %errorlevel% neq 0 (
+    echo ERROR: No se pudieron instalar las dependencias.
+    pause
+    exit /b 1
+)
+
+echo Instalando Chromium...
 playwright install chromium
+if %errorlevel% neq 0 (
+    echo ERROR: No se pudo instalar Chromium.
+    pause
+    exit /b 1
+)
 
-echo 🔗 Creando comandos globales...
+echo.
+echo Creando comandos globales...
 
-REM Crear wrapper para jira
 (
 echo @echo off
 echo call "%INSTALL_DIR%\venv\Scripts\activate.bat"
 echo python "%INSTALL_DIR%\jira_deploy.py" %%*
 ) > "%BIN_DIR%\jira.bat"
 
-REM Crear wrapper para noc
 (
 echo @echo off
 echo call "%INSTALL_DIR%\venv\Scripts\activate.bat"
 echo python "%INSTALL_DIR%\noc_deploy.py" %%*
 ) > "%BIN_DIR%\noc.bat"
 
-REM Crear wrapper para ass
 (
 echo @echo off
 echo call "%INSTALL_DIR%\venv\Scripts\activate.bat"
 echo python "%INSTALL_DIR%\assessment.py" %%*
 ) > "%BIN_DIR%\ass.bat"
 
-REM Agregar al PATH usando PowerShell (evita truncacion de setx)
 echo.
-echo Verificando PATH...
-powershell -NoProfile -Command ^
-  "$binDir = '%BIN_DIR%'; ^
-   $userPath = [Environment]::GetEnvironmentVariable('PATH','User'); ^
-   if ($userPath -notlike ('*' + $binDir + '*')) { ^
-     [Environment]::SetEnvironmentVariable('PATH', $userPath + ';' + $binDir, 'User'); ^
-     Write-Host 'PATH actualizado correctamente.' ^
-   } else { ^
-     Write-Host 'PATH ya estaba configurado.' ^
-   }"
+echo Configurando PATH...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $p = [Environment]::GetEnvironmentVariable('PATH','User'); if (-not $p) { $p = '' }; if ($p -notlike '*\.local\bin*') { [Environment]::SetEnvironmentVariable('PATH', $p + ';%BIN_DIR%', 'User'); Write-Host 'PATH actualizado.' } else { Write-Host 'PATH ya estaba configurado.' } }"
 
 echo.
 echo ===================================================
-echo   ✅ Instalación completada!
+echo   Instalacion completada!
 echo ===================================================
 echo.
 echo Comandos disponibles:
@@ -87,6 +109,6 @@ echo   jira  - Crear ticket de deploy en JIRA
 echo   noc   - Crear ticket en NOC
 echo   ass   - Crear ticket de assessment
 echo.
-echo IMPORTANTE: Cerrá y reabrí la terminal para usar los comandos
+echo IMPORTANTE: Abre una NUEVA terminal para usar los comandos.
 echo.
 pause
