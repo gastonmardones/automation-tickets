@@ -13,7 +13,7 @@ def load_config():
 
 config = load_config()
 
-def crear_ticket_assessment(componente, version, ambiente, url=""):
+def crear_ticket_assessment(componente, version, ambiente, url="", emails=None):
     IP_NODO_MAP = {
         'qa': ['10.9.10.75', '10.9.10.76', '10.9.10.116', '10.9.10.156', '10.9.10.157', '10.9.11.188', '10.9.11.187'],
         'dev': ['10.9.10.75', '10.9.10.76', '10.9.10.116', '10.9.10.156', '10.9.10.157', '10.9.11.188', '10.9.11.187'],
@@ -25,6 +25,13 @@ def crear_ticket_assessment(componente, version, ambiente, url=""):
     base_dir = os.path.dirname(__file__)
     browser_profile = os.path.join(base_dir, 'browser_profile_noc')
     auth_state_file = os.path.join(base_dir, 'noc_auth_state.json')
+
+    def agregar_email(email):
+        input_selector = '[data-fname="email_ids_to_notify"] .select2-input'
+        page.click(input_selector)
+        page.keyboard.type(email, delay=0)
+        page.wait_for_selector('.select2-results li.select2-result-selectable', timeout=10000)
+        page.locator('.select2-results li.select2-result-selectable').first.click()
 
     def seleccionar_select2(label, valor, esperar_sugerencia=False):
         selector = f'[data-fname="{label}"] .select2-choice'
@@ -130,6 +137,14 @@ def crear_ticket_assessment(componente, version, ambiente, url=""):
             }}
         ''')
 
+        # === EMAILS A NOTIFICAR ===
+        if emails:
+            for email in emails:
+                try:
+                    agregar_email(email.strip())
+                except Exception as e:
+                    print(f"No se pudo agregar el email '{email}': {e}")
+
         page.evaluate("""
         () => {
             if (document.getElementById('modal-recordatorio')) return;
@@ -226,9 +241,10 @@ def main():
         parser.add_argument('version')
         parser.add_argument('ambiente', choices=['qa', 'dev', 'hml', 'prod-int', 'prod-ext'])
         parser.add_argument('url', nargs='?', default='')
+        parser.add_argument('--emails', nargs='+', default=[], metavar='EMAIL')
         args = parser.parse_args()
 
-        crear_ticket_assessment(args.componente, args.version, args.ambiente, args.url)
+        crear_ticket_assessment(args.componente, args.version, args.ambiente, args.url, args.emails)
     else:
         print("=== CREAR TICKET DE ASSESSMENT ===\n")
 
@@ -243,12 +259,16 @@ def main():
 
         url = input("URL (opcional, Enter para omitir): ").strip()
 
+        emails_input = input("Emails a notificar (separados por espacio, Enter para omitir): ").strip()
+        emails = emails_input.split() if emails_input else []
+
         print("\nCreando ticket...")
         crear_ticket_assessment(
             componente=componente,
             version=version,
             ambiente=ambiente,
-            url=url if url else ""
+            url=url if url else "",
+            emails=emails
         )
 
 if __name__ == '__main__':
