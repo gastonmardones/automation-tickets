@@ -5,25 +5,29 @@ import re
 import json
 import os
 import atexit
+from git_url_parser import parsear_url_git
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
     if not os.path.exists(config_path):
         sys.exit(1)
-    
+
     with open(config_path, 'r') as f:
         return json.load(f)
 
 config = load_config()
 
+JIRA_CLOUD_BASE = "https://asi-jira-cloud.atlassian.net"
+TIPO_INCIDENCIA = ".ASI Deploy de version (Ch2)"
+
 def crear_ticket_jira(componente, version, tag, ticket_noc):
+    campos_pendientes = not (componente and version and tag)
 
     # Rutas
     base_dir = os.path.dirname(__file__)
     noc_profile = os.path.join(base_dir, 'browser_profile_noc')
-    jira_profile = os.path.join(base_dir, 'browser_profile_jira')
+    jira_profile = os.path.join(base_dir, 'browser_profile_jira_cloud')
     noc_auth_file = os.path.join(base_dir, 'noc_auth_state.json')
-    jira_auth_file = os.path.join(base_dir, 'jira_auth_state.json')
 
     def normalizar_tag(tag):
         tag_upper = tag.upper().strip()
@@ -124,94 +128,83 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             except:
                 noc_context.close()
                 return
-        
+
         # Extraer descripción
         try:
             descripcion_elemento = noc_page.locator('#req-desc-body')
             descripcion = descripcion_elemento.inner_text()
         except Exception as e:
             descripcion = f"Deploy {componente} {version}-{tag}"
-        
-        # Extraer URL GIT
+
+        # Extraer URL GIT (probar TAG, UPGRADE y CHANGELOG, en ese orden;
+        # los 3 apuntan al mismo repo/tag, solo cambia el archivo final)
+        CAMPOS_URL_GIT = ['udf_sline_11422', 'udf_sline_11423', 'udf_sline_11420']
         url_git = ""
-        try:
-            url_git_elem = noc_page.locator('p[data-name="udf_sline_11422"]')
-            url_git = url_git_elem.inner_text(timeout=2000).strip()
-            if url_git:
+        datos = None
+        for campo in CAMPOS_URL_GIT:
+            try:
+                elem = noc_page.locator(f'p[data-name="{campo}"]')
+                valor = elem.inner_text(timeout=2000).strip()
+            except Exception:
+                continue
+            if not valor or valor == '-':
+                continue
+            if not url_git:
+                url_git = valor
                 print(f"URL GIT obtenida: {url_git}")
-        except Exception as e:
-            print(f"No se encontró URL GIT: {e}")
-        
+            intento = parsear_url_git(valor)
+            if intento:
+                datos = intento
+                break
+
         print("\nDatos extraídos del NOC")
 
         noc_context.close()
 
-        # PASO 2: Crear ticket en JIRA
+        # Si no vinieron componente/version/tag (modo interactivo con solo ticket NOC),
+        # completarlos con lo parseado de alguna de las URLs GIT del ticket.
+        if campos_pendientes:
+            if datos:
+                componente, version, tag = datos
+                print(f"Componente: {componente} | Versión: {version} | Tag: {tag}")
+            else:
+                print("No se pudo interpretar ninguna URL GIT del ticket, completá los campos manualmente.")
+                componente = input("Componente: ").strip()
+                version = input("Versión (ej: 1.0.0): ").strip()
+                tag = input("Tag (RC o HOTFIX): ").strip()
 
+        # PASO 2: Crear ticket en JIRA CLOUD
+
+        # El perfil persistente evita repetir el login SSO/2FA en cada corrida.
+        # La primera vez (o cuando expire la sesión de Microsoft), se abre visible
+        # para que el usuario complete el login manualmente.
         jira_context = p.chromium.launch_persistent_context(
             user_data_dir=jira_profile,
             headless=False
         )
-        # Cargar cookies guardadas si existen
-        if os.path.exists(jira_auth_file):
-            with open(jira_auth_file, 'r') as f:
-                state = json.load(f)
-                if state.get('cookies'):
-                    jira_context.add_cookies(state['cookies'])
         active_context[0] = jira_context
 
         jira_page = jira_context.new_page()
-        create_issue_url = "https://asijira.buenosaires.gob.ar/secure/CreateIssue!default.jspa"
-        login_url = "https://asijira.buenosaires.gob.ar/login.jsp?os_destination=%2Fsecure%2FCreateIssue%21default.jspa"
-
-        jira_page.goto(create_issue_url)
+        jira_page.goto(f"{JIRA_CLOUD_BASE}/jira/dashboards/10573")
         jira_page.wait_for_load_state('domcontentloaded')
 
-        # Detectar estado: form listo, login, o página de error
-        jira_page.wait_for_selector('#project-field, #pid, #username-field, .aui-message-warning', timeout=15000)
+        create_button = jira_page.get_by_test_id("atlassian-navigation--create-button")
 
-        # Si hay error "No registrado" → ir directo al login
-        if jira_page.locator('.aui-message-warning').count() > 0:
-            jira_page.goto(login_url)
-            jira_page.wait_for_load_state('domcontentloaded')
-            # Esperar login page con selector flexible (distintas versiones de JIRA)
+        try:
+            create_button.wait_for(timeout=15000)
+        except:
+            print("No se detectó sesión activa. Completá el login (usuario, Microsoft, 2FA) en el navegador...")
             try:
-                jira_page.wait_for_selector('#username-field, #os_username, input[name="username"]', timeout=10000)
-            except:
-                print("No se pudo cargar la página de login de JIRA. Intentá loguearte manualmente en el browser.")
-
-        # Si estamos en login → llenar credenciales
-        jira_password = config.get('password', '')
-        if jira_page.locator('#username-field').count() > 0:
-            jira_page.fill('#username-field', config.get('cuit', ''))
-            if jira_password:
-                jira_page.fill('#password-field', jira_password)
-                jira_page.wait_for_timeout(300)
-                jira_page.click('#login-button')
-                print("Credenciales JIRA completadas automáticamente.")
-            else:
-                print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
-        elif jira_page.locator('#os_username').count() > 0:
-            jira_page.fill('#os_username', config.get('cuit', ''))
-            if jira_password:
-                jira_page.fill('#os_password', jira_password)
-                jira_page.wait_for_timeout(300)
-                jira_page.locator('input[type="submit"]').click()
-                print("Credenciales JIRA completadas automáticamente.")
-            else:
-                print("Usuario JIRA completado. Ingresá tu contraseña en el navegador.")
-
-            try:
-                jira_page.wait_for_selector('#project-field, #pid', timeout=0)
-                jira_context.storage_state(path=jira_auth_file)
-                print("Sesión JIRA guardada.")
-
-                jira_page.goto(create_issue_url)
-                jira_page.wait_for_load_state('domcontentloaded')
+                create_button.wait_for(timeout=0)
+                jira_context.storage_state(path=os.path.join(base_dir, 'jira_cloud_auth_state.json'))
+                print("Sesión JIRA Cloud guardada.")
             except:
                 jira_context.close()
                 return
-        
+
+        create_button.click()
+
+        # === Banner: Proyecto manual ===
         jira_page.evaluate("""
         () => {
             if (document.getElementById('banner-recordatorio')) return;
@@ -237,7 +230,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
 
             banner.innerHTML = `
                 <span style="font-size: 20px;">ℹ️</span>
-                <span>Cargá manualmente <strong>Proyecto</strong> y <strong>Tipo de Incidencia</strong> y seleccioná <strong>Siguiente</strong></span>
+                <span>Cargá manualmente el <strong>Proyecto</strong></span>
                 <button id="cerrar-banner" style="
                     background: rgba(255,255,255,0.2);
                     color: white;
@@ -263,11 +256,11 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             const style = document.createElement('style');
             style.innerHTML = `
                 @keyframes slideUp {
-                    from { 
+                    from {
                         opacity: 0;
                         transform: translateX(-50%) translateY(20px);
                     }
-                    to { 
+                    to {
                         opacity: 1;
                         transform: translateX(-50%) translateY(0);
                     }
@@ -276,163 +269,152 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             document.head.appendChild(style);
         }
         """)
-        
+
         try:
-            jira_page.wait_for_selector('#summary', timeout=120000)
+            jira_page.locator('#summary-field').wait_for(timeout=120000)
         except:
             jira_context.close()
             return
-        
-        # Componente - intentar seleccionar solo si existe exactamente
-        componente_seleccionado = False
-        if componente:
-            try:
-                jira_page.locator('#components-textarea').click()
-                jira_page.locator('#components-textarea').fill(componente)
-                
-                jira_page.wait_for_selector('#components-suggestions .aui-list-item', timeout=3000)
-                
-                try:
-                    exact_match = jira_page.locator(f'#components-suggestions .aui-list-item a:has-text("{componente}")').first
-                    texto_sugerencia = exact_match.inner_text()
-                    
-                    if texto_sugerencia.strip() == componente:
-                        exact_match.click()
-                        componente_seleccionado = True
-                    else:
-                        jira_page.locator('#components-textarea').clear()
-                except:
-                    jira_page.locator('#components-textarea').clear()
-                    
-            except Exception as e:
-                print("Dejando el campo componente vacío")
-        
-        # Resumen
-        resumen = f"Deploy {componente} {version}-{tag}" if componente else f"Deploy {version}-{tag}"
-        jira_page.locator('#summary').click()
-        jira_page.locator('#summary').fill(resumen)
-        
-        # Descripción — inyecta directo en el textarea del wiki editor
-        descripcion_escaped = descripcion.replace('\\', '\\\\').replace('`', '\\`')
-        jira_page.evaluate(f"""() => {{
-            const ta = document.getElementById('description');
-            if (ta) {{
-                ta.value = `{descripcion_escaped}`;
-                ta.dispatchEvent(new Event('input', {{bubbles: true}}));
-                ta.dispatchEvent(new Event('change', {{bubbles: true}}));
-            }}
-        }}""")
-        
-        # Versión
-        jira_page.locator('#fixVersions-textarea').click()
-        jira_page.locator('#fixVersions-textarea').fill(version)
-        
+
+        # === Tipo de incidencia (fijo) ===
         try:
-            jira_page.wait_for_selector('#fixVersions-suggestions .aui-list-item', timeout=3000)
-            jira_page.locator('#fixVersions-suggestions .aui-list-item').first.click()
+            jira_page.locator('[id^="type-picker-"]').click()
+            jira_page.get_by_role("option", name=TIPO_INCIDENCIA).click()
+        except Exception as e:
+            print(f"No se pudo seleccionar el Tipo de Incidencia automáticamente: {e}")
+
+        # === Resumen ===
+        resumen = f"Deploy {componente} {version}-{tag}" if componente else f"Deploy {version}-{tag}"
+        jira_page.locator('#summary-field').click()
+        jira_page.locator('#summary-field').fill(resumen)
+
+        # === Descripción (editor ProseMirror/ADF) ===
+        try:
+            jira_page.locator('#ak-editor-textarea').click()
+            jira_page.locator('#ak-editor-textarea').fill(descripcion)
+        except Exception as e:
+            print(f"No se pudo llenar la descripción automáticamente: {e}")
+
+        # === Fix Version ===
+        try:
+            jira_page.locator('#fixVersions-field').click()
+            jira_page.locator('#fixVersions-field').fill(version)
+            jira_page.wait_for_selector('[role="option"], [role="listbox"]', timeout=3000)
+
+            # El botón "Crear nueva versión" siempre aparece en el footer del
+            # dropdown, exista o no la versión. Solo seleccionar si hay una
+            # opción existente cuyo texto coincida exactamente; si no, dejar vacío.
+            opcion_existente = jira_page.locator('[role="option"]').filter(has_text=version).first
+
+            if opcion_existente.count() > 0 and opcion_existente.inner_text().strip() == version:
+                opcion_existente.click()
+            else:
+                print(f"Versión '{version}' no existe en Jira. Dejando el campo vacío.")
+                jira_page.locator('#fixVersions-field').clear()
+                jira_page.keyboard.press('Escape')
         except Exception as e:
             print(f"No se pudo seleccionar versión automáticamente: {e}")
-        
-        # Tag
+
+        # === Tag (customfield_10093, label ".Tag-C") ===
         tag_normalizado = normalizar_tag(tag)
         try:
-            jira_page.locator('#customfield_11304').select_option(label=tag_normalizado, timeout=5000)
+            jira_page.locator('#customfield_10093-field').click()
+            jira_page.locator('#customfield_10093-field').fill(tag_normalizado)
+            jira_page.wait_for_selector('[role="option"]', timeout=3000)
+            jira_page.get_by_role("option", name=tag_normalizado).click()
         except Exception as e:
-            opciones = jira_page.evaluate("""
-                Array.from(document.querySelectorAll('#customfield_11304 option'))
-                    .filter(o => o.value)
-                    .map(o => o.text.trim())
-            """)
-            print(f"Tag '{tag_normalizado}' no encontrado. Opciones disponibles: {opciones}")
-        
-        # Responsable Referente
-        jira_page.locator('#customfield_10187-field').click()
-        jira_page.locator('#customfield_10187-field').fill(config['jira_responsable'])
+            print(f"No se pudo seleccionar el Tag '{tag_normalizado}' automáticamente: {e}")
+
+        # === Responsable Referente (customfield_10096, fabric-user-picker) ===
         try:
-            jira_page.wait_for_selector('#customfield_10187-suggestions .aui-list-item', timeout=3000)
-            jira_page.locator('#customfield_10187-suggestions .aui-list-item').first.click()
-        except:
-            pass
-        
-        # Nro Ticket ME
-        jira_page.locator('#customfield_10500').click()
-        jira_page.locator('#customfield_10500').fill(ticket_noc)
-        
-        # URL GIT
+            jira_page.locator('#customfield_10096-field').click()
+            jira_page.locator('#customfield_10096-field').fill(config['jira_responsable'])
+            jira_page.wait_for_selector('[role="option"]', timeout=5000)
+            jira_page.get_by_role("option").first.click()
+        except Exception as e:
+            print(f"No se pudo completar Responsable Referente automáticamente: {e}")
+
+        # === Nro Ticket ME (customfield_10099, input numérico simple) ===
+        try:
+            jira_page.locator('#customfield_10099-field').click()
+            jira_page.locator('#customfield_10099-field').fill(ticket_noc)
+        except Exception as e:
+            print(f"No se pudo completar Nro Ticket ME automáticamente: {e}")
+
+        # === URL GIT (customfield_10108, input de texto simple) ===
         if url_git:
             try:
-                jira_page.locator('#customfield_10159').click()
-                jira_page.locator('#customfield_10159').fill(url_git)
+                jira_page.locator('#customfield_10108-field').click()
+                jira_page.locator('#customfield_10108-field').fill(url_git)
             except Exception as e:
                 print(f"No se pudo llenar URL GIT: {e}")
-        
-        # Mostrar modal solo si NO se seleccionó componente
-        if not componente_seleccionado:
-            jira_page.evaluate("""
-            () => {
-                if (document.getElementById('modal-recordatorio')) return;
 
-                const overlay = document.createElement('div');
-                overlay.id = 'modal-recordatorio';
-                overlay.style.position = 'fixed';
-                overlay.style.top = '0';
-                overlay.style.left = '0';
-                overlay.style.width = '100vw';
-                overlay.style.height = '100vh';
-                overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                overlay.style.display = 'flex';
-                overlay.style.alignItems = 'center';
-                overlay.style.justifyContent = 'center';
-                overlay.style.zIndex = '999999';
+        # === Modal recordatorio para completar el componente manualmente ===
+        jira_page.evaluate("""
+        () => {
+            if (document.getElementById('modal-recordatorio')) return;
 
-                const modal = document.createElement('div');
-                modal.style.background = 'white';
-                modal.style.borderRadius = '10px';
-                modal.style.boxShadow = '0 6px 20px rgba(0,0,0,0.25)';
-                modal.style.padding = '20px 28px';
-                modal.style.maxWidth = '320px';
-                modal.style.textAlign = 'center';
-                modal.style.fontFamily = 'system-ui, sans-serif';
-                modal.style.animation = 'fadeIn 0.3s ease';
+            const overlay = document.createElement('div');
+            overlay.id = 'modal-recordatorio';
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            overlay.style.display = 'flex';
+            overlay.style.alignItems = 'center';
+            overlay.style.justifyContent = 'center';
+            overlay.style.zIndex = '999999';
 
-                modal.innerHTML = `
-                    <p style="font-size:15px; color:#333; margin-bottom:16px; line-height:1.4;">
-                    No te olvides de seleccionar<br>
-                    el <strong>componente</strong>.
-                    </p>
-                    <button id="cerrar-modal-recordatorio" style="
-                    background:#2d6cdf;
-                    color:white;
-                    border:none;
-                    border-radius:6px;
-                    padding:8px 16px;
-                    font-size:14px;
-                    cursor:pointer;
-                    transition:background 0.2s ease;
-                    ">OK</button>
-                `;
+            const modal = document.createElement('div');
+            modal.style.background = 'white';
+            modal.style.borderRadius = '10px';
+            modal.style.boxShadow = '0 6px 20px rgba(0,0,0,0.25)';
+            modal.style.padding = '20px 28px';
+            modal.style.maxWidth = '320px';
+            modal.style.textAlign = 'center';
+            modal.style.fontFamily = 'system-ui, sans-serif';
+            modal.style.animation = 'fadeIn 0.3s ease';
 
-                overlay.appendChild(modal);
-                document.body.appendChild(overlay);
+            modal.innerHTML = `
+                <p style="font-size:15px; color:#333; margin-bottom:16px; line-height:1.4;">
+                No te olvides de seleccionar<br>
+                el <strong>componente</strong>.
+                </p>
+                <button id="cerrar-modal-recordatorio" style="
+                background:#2d6cdf;
+                color:white;
+                border:none;
+                border-radius:6px;
+                padding:8px 16px;
+                font-size:14px;
+                cursor:pointer;
+                transition:background 0.2s ease;
+                ">OK</button>
+            `;
 
-                document.getElementById('cerrar-modal-recordatorio').addEventListener('click', () => {
-                    overlay.style.transition = 'opacity 0.3s ease';
-                    overlay.style.opacity = '0';
-                    setTimeout(() => overlay.remove(), 300);
-                });
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
 
-                const style = document.createElement('style');
-                style.innerHTML = `
-                    @keyframes fadeIn {
-                    from { transform: scale(0.9); opacity: 0; }
-                    to { transform: scale(1); opacity: 1; }
-                    }
-                `;
-                document.head.appendChild(style);
-            }
-            """)
-            
-            jira_page.wait_for_selector('#modal-recordatorio', state='detached', timeout=300000)
+            document.getElementById('cerrar-modal-recordatorio').addEventListener('click', () => {
+                overlay.style.transition = 'opacity 0.3s ease';
+                overlay.style.opacity = '0';
+                setTimeout(() => overlay.remove(), 300);
+            });
+
+            const style = document.createElement('style');
+            style.innerHTML = `
+                @keyframes fadeIn {
+                from { transform: scale(0.9); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        """)
+
+        jira_page.wait_for_selector('#modal-recordatorio', state='detached', timeout=300000)
 
         print("\n[Cerrá el navegador o presioná Enter para finalizar...]")
 
@@ -460,7 +442,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         jira_context.close()
 
 def main():
-    
+
     if len(sys.argv) > 1:
         import argparse
         parser = argparse.ArgumentParser()
@@ -469,20 +451,20 @@ def main():
         parser.add_argument('tag')
         parser.add_argument('ticket_noc')
         args = parser.parse_args()
-        
+
         crear_ticket_jira(args.componente, args.version, args.tag, args.ticket_noc)
     else:
         print("=== CREAR TICKET DE DEPLOY EN JIRA ===\n")
-        
-        componente = input("Componente: ").strip()
-        version = input("Versión (ej: 1.0.0): ").strip()
-        tag = input("Tag (RC o HOTFIX): ").strip()
+
         ticket_noc = input("Nro Ticket NOC: ").strip()
-        
+
+        # componente/version/tag se completan automáticamente parseando
+        # la URL GIT del ticket NOC (ver crear_ticket_jira). Si no se puede,
+        # se piden ahí mismo por input.
         crear_ticket_jira(
-            componente=componente,
-            version=version,
-            tag=tag,
+            componente="",
+            version="",
+            tag="",
             ticket_noc=ticket_noc
         )
 

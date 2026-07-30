@@ -25,6 +25,9 @@ venv/
 env/
 ENV/
 
+# Config local (usar config.example.json como plantilla)
+config.json
+
 # Sesiones guardadas
 *_auth_state.json
 noc_auth_state.json

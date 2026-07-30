@@ -3,6 +3,7 @@ import sys
 import json
 import os
 import atexit
+from git_url_parser import parsear_url_git
 
 # Cargar configuración
 def load_config():
@@ -215,14 +216,25 @@ def main():
                            args.url, args.fecha, args.hora)
     else:
         # Preguntar interactivamente
-        componente = input("Componente: ").strip()
-        version = input("Versión: ").strip()
+        git_url = input("URL git (Enter para omitir): ").strip()
+        datos = parsear_url_git(git_url) if git_url else None
+
+        if datos:
+            componente, version_base, tag = datos
+            version = f"{version_base}-{tag}"
+            print(f"Componente: {componente} | Versión: {version}")
+        else:
+            if git_url:
+                print("No se pudo interpretar la URL, completá los campos manualmente.")
+            componente = input("Componente: ").strip()
+            version = input("Versión: ").strip()
+
         print("\nAmbientes disponibles: dev, qa, hml, prd")
         ambiente = input("Ambiente: ").strip().lower()
         while ambiente not in ['dev', 'qa', 'hml', 'prd']:
             print("Ambiente inválido. Usá: qa, hml o prd")
             ambiente = input("Ambiente: ").strip().lower()
-        url = input("URL (opcional, Enter para omitir): ").strip()
+        url = input("URL del componente (DNS, opcional, Enter para omitir): ").strip()
         fecha = input("Fecha del deploy (ej: 13/11, Enter para omitir): ").strip()
         hora = None
         if fecha:

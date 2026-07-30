@@ -3,6 +3,7 @@ import sys
 import json
 import os
 import atexit
+from git_url_parser import parsear_url_git
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -124,11 +125,11 @@ def crear_ticket_assessment(componente, version, ambiente, url="", emails=None):
         page.fill('#for_udf_fields\\.udf_sline_902', version)
 
         # === ASUNTO ===
-        page.fill('#for_subject', f"Assessment sobre {componente} v{version}")
+        page.fill('#for_subject', f"Assessment sobre {componente} {version}")
 
         # === DESCRIPCION ===
         url_linea = f'<br><br><a href="{url}" target="_blank">{url}</a><br><br>' if url else ''
-        descripcion = f'<div>Buen día,<br><br>Por favor realizar el assessment del componente {componente} v{version}{url_linea}Adjunto manual de usuario y collection postman.<br><br>Quedo atento, gracias<br><br></div>'
+        descripcion = f'<div>Buen día,<br><br>Por favor realizar el assessment del componente {componente} {version}{url_linea}Adjunto manual de usuario y collection postman.<br><br>Quedo atento, gracias<br><br></div>'
 
         description_frame = page.frame_locator('iframe.ze_area').first
         description_frame.locator('body').evaluate(f'''
@@ -248,8 +249,18 @@ def main():
     else:
         print("=== CREAR TICKET DE ASSESSMENT ===\n")
 
-        componente = input("Componente: ").strip()
-        version = input("Versión: ").strip()
+        git_url = input("URL git (Enter para omitir): ").strip()
+        datos = parsear_url_git(git_url) if git_url else None
+
+        if datos:
+            componente, version_base, tag = datos
+            version = f"{version_base}-{tag}"
+            print(f"Componente: {componente} | Versión: {version}")
+        else:
+            if git_url:
+                print("No se pudo interpretar la URL, completá los campos manualmente.")
+            componente = input("Componente: ").strip()
+            version = input("Versión: ").strip()
 
         print("\nAmbientes disponibles: qa, dev, hml, prod-int, prod-ext")
         ambiente = input("Ambiente: ").strip().lower()
@@ -257,7 +268,7 @@ def main():
             print("Ambiente inválido. Usá: qa, dev, hml, prod-int o prod-ext")
             ambiente = input("Ambiente: ").strip().lower()
 
-        url = input("URL (opcional, Enter para omitir): ").strip()
+        url = input("URL del componente (DNS, opcional, Enter para omitir): ").strip()
 
         emails_input = input("Emails a notificar (separados por espacio, Enter para omitir): ").strip()
         emails = emails_input.split() if emails_input else []
