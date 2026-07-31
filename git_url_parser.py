@@ -7,10 +7,11 @@ def parsear_url_git(url):
     Extrae (componente, version, tag) de una URL de GitLab tipo:
       https://repositorio-asi.buenosaires.gob.ar/<namespace>/<componente>/-/tree/<version>-<TAG>
       https://repositorio-asi.buenosaires.gob.ar/<namespace>/<componente>/-/blob/<version>-<TAG>/CHANGELOG.md?ref_type=tags
+      https://repositorio-asi.buenosaires.gob.ar/<namespace>/<componente>/-/tags/v<version>-<TAG>
 
     Devuelve None si no pudo parsear componente, versión y tag.
     """
-    match = re.search(r'/([^/]+)/-/(?:tree|blob)/([^/?]+)', url.strip())
+    match = re.search(r'/([^/]+)/-/(?:tree|blob|tags)/([^/?]+)', url.strip())
     if not match:
         return None
 
@@ -18,7 +19,7 @@ def parsear_url_git(url):
     ref = match.group(2)
 
     tag_pattern = '|'.join(TAGS_VALIDOS)
-    ref_match = re.match(rf'^(.+)-({tag_pattern})$', ref, re.IGNORECASE)
+    ref_match = re.match(rf'^v?(.+)-({tag_pattern})$', ref, re.IGNORECASE)
     if not ref_match:
         return None
 
