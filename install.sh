@@ -20,6 +20,8 @@ echo "Copiando archivos..."
 cp jira_deploy.py "$INSTALL_DIR/"
 cp noc_deploy.py "$INSTALL_DIR/"
 cp assessment.py "$INSTALL_DIR/"
+cp git_url_parser.py "$INSTALL_DIR/"
+cp dns_store.py "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
 
 # Copiar o crear config.json
@@ -69,6 +71,14 @@ python "$HOME/.automation-tickets/assessment.py" "$@"
 EOF
 chmod +x "$BIN_DIR/ass"
 
+# Crear wrapper para dns
+cat > "$BIN_DIR/dns" << 'EOF'
+#!/bin/bash
+source "$HOME/.automation-tickets/venv/bin/activate"
+python "$HOME/.automation-tickets/dns_store.py" "$@"
+EOF
+chmod +x "$BIN_DIR/dns"
+
 # Verificar PATH
 echo ""
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
@@ -90,4 +100,5 @@ echo "Comandos disponibles:"
 echo "  jira  - Crear ticket de deploy en JIRA"
 echo "  noc   - Crear ticket en NOC"
 echo "  ass   - Crear ticket de assessment"
+echo "  dns   - Ver/editar la base local de DNS (dns list)"
 echo ""

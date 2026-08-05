@@ -81,6 +81,9 @@ noc
 
 # Crear ticket de assessment
 ass
+
+# Ver/editar la base local de DNS
+dns list
 ```
 
 ### Modo interactivo (sin argumentos)
@@ -99,11 +102,59 @@ ass miba-login-api 1.0.0-RC qa
 **Ambientes válidos para `noc` y `ass`:** `dev`, `qa`, `hml`, `prd`
 **Tags válidos para `jira`:** `RC` → selecciona `RC-1` en el desplegable | `HOTFIX` → selecciona `FIX-1`
 
+## 🌐 Base de DNS
+
+`noc` y `ass` recuerdan el DNS (URL del componente) que cargaste, por componente y
+por ambiente, en una base SQLite local: `~/.automation-tickets/dns.db`. No se sube
+al repo ni se comparte: es tuya.
+
+La primera vez que cargás el DNS de un componente en un ambiente, queda guardado.
+Las siguientes veces aparece precargado y solo tenés que dar Enter:
+
+```bash
+noc
+# URL git: .../miba-login-api/-/tags/v1.0.0-RC
+# Ambiente: qa
+# DNS guardado para miba-login-api [qa]: https://qa.miba.example.gob.ar
+# URL del componente (Enter para usar el guardado, '-' para omitir):
+```
+
+- **Enter** → usa el DNS guardado
+- **escribir otro** → lo usa y actualiza el guardado
+- **`-`** → omite el DNS en este ticket, sin borrar el guardado
+
+En modo rápido funciona igual: si no pasás la URL, se toma la guardada; si la pasás,
+queda guardada.
+
+```bash
+noc miba-login-api 1.0.0-RC qa                                   # usa el DNS guardado
+noc miba-login-api 1.0.0-RC qa https://qa.miba.example.gob.ar    # lo usa y lo guarda
+```
+
+**Ambientes:** `prd`, `prod-int` y `prod-ext` comparten un único DNS de producción.
+`dev`, `qa` y `hml` son independientes.
+
+### Comando `dns`
+
+```bash
+dns list                              # todos los DNS guardados
+dns list miba-login-api               # los de un componente
+dns set miba-login-api qa https://qa.miba.example.gob.ar
+dns del miba-login-api qa             # borra un ambiente
+dns del miba-login-api                # borra todos los del componente
+```
+
 
 ## 🔧 Actualizar
 ```bash
 cd automation-tickets
-git pull
+./update.sh  # (o update.bat en Windows)
+```
+
+`update` hace `git pull` y actualiza las dependencias. Si además se agregaron comandos
+nuevos (por ejemplo `dns`), corré el instalador para que se creen los wrappers:
+
+```bash
 ./install.sh  # (o install.bat en Windows)
 ```
 
@@ -112,17 +163,21 @@ git pull
 ### Linux
 - Scripts: `~/.automation-tickets/`
 - Comandos: `~/.local/bin/`
+- Base de DNS: `~/.automation-tickets/dns.db`
 
 ### Windows
 - Scripts: `%USERPROFILE%\.automation-tickets\`
 - Comandos: `%USERPROFILE%\.local\bin\`
+- Base de DNS: `%USERPROFILE%\.automation-tickets\dns.db`
+
+`dns.db` y `config.json` son tuyos: no se versionan ni los pisa el instalador.
 
 ## ⚙️ Cómo funciona
 
 El instalador:
 1. Crea un virtualenv aislado en tu home
 2. Instala Python, Playwright y dependencias
-3. Crea comandos wrapper globales (`jira`, `noc`, `ass`)
+3. Crea comandos wrapper globales (`jira`, `noc`, `ass`, `dns`)
 4. Los agrega al PATH automáticamente
 
 Así podés usar los comandos desde **cualquier directorio** sin activar virtualenvs manualmente.

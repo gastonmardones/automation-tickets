@@ -4,6 +4,7 @@ import json
 import os
 import atexit
 from git_url_parser import parsear_url_git
+from dns_store import pedir_dns, resolver_dns
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -232,7 +233,11 @@ def crear_ticket_assessment(componente, version, ambiente, url="", emails=None):
         input_thread.start()
 
         closed.wait()
-        context.close()
+        # Si el usuario cerró el navegador a mano, el contexto ya está cerrado.
+        try:
+            context.close()
+        except Exception:
+            pass
 
 def main():
     if len(sys.argv) > 1:
@@ -245,7 +250,10 @@ def main():
         parser.add_argument('--emails', nargs='+', default=[], metavar='EMAIL')
         args = parser.parse_args()
 
-        crear_ticket_assessment(args.componente, args.version, args.ambiente, args.url, args.emails)
+        # Si no pasaron url, se busca el DNS guardado; si la pasaron, queda guardada.
+        url = resolver_dns(args.componente, args.ambiente, args.url)
+
+        crear_ticket_assessment(args.componente, args.version, args.ambiente, url, args.emails)
     else:
         print("=== CREAR TICKET DE ASSESSMENT ===\n")
 
@@ -268,7 +276,7 @@ def main():
             print("Ambiente inválido. Usá: qa, dev, hml, prod-int o prod-ext")
             ambiente = input("Ambiente: ").strip().lower()
 
-        url = input("URL del componente (DNS, opcional, Enter para omitir): ").strip()
+        url = pedir_dns(componente, ambiente)
 
         emails_input = input("Emails a notificar (separados por espacio, Enter para omitir): ").strip()
         emails = emails_input.split() if emails_input else []
@@ -283,4 +291,8 @@ def main():
         )
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelado.")
+        sys.exit(0)

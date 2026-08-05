@@ -439,7 +439,11 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         input_thread.start()
 
         closed.wait()
-        jira_context.close()
+        # Si el usuario cerró el navegador a mano, el contexto ya está cerrado.
+        try:
+            jira_context.close()
+        except Exception:
+            pass
 
 def main():
 
@@ -469,4 +473,8 @@ def main():
         )
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelado.")
+        sys.exit(0)

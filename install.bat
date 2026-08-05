@@ -22,6 +22,8 @@ echo Copiando archivos...
 copy /Y jira_deploy.py "%INSTALL_DIR%\" > nul
 copy /Y noc_deploy.py "%INSTALL_DIR%\" > nul
 copy /Y assessment.py "%INSTALL_DIR%\" > nul
+copy /Y git_url_parser.py "%INSTALL_DIR%\" > nul
+copy /Y dns_store.py "%INSTALL_DIR%\" > nul
 copy /Y requirements.txt "%INSTALL_DIR%\" > nul
 
 if exist config.json (
@@ -141,6 +143,12 @@ echo call "%INSTALL_DIR%\venv\Scripts\activate.bat"
 echo python "%INSTALL_DIR%\assessment.py" %%*
 ) > "%BIN_DIR%\ass.bat"
 
+(
+echo @echo off
+echo call "%INSTALL_DIR%\venv\Scripts\activate.bat"
+echo python "%INSTALL_DIR%\dns_store.py" %%*
+) > "%BIN_DIR%\dns.bat"
+
 REM === RESULTADO ===
 echo.
 echo ===================================================
@@ -151,9 +159,10 @@ echo Verificacion:
 if exist "%BIN_DIR%\noc.bat"               (echo   OK: noc.bat)     else (echo   ERROR: noc.bat)
 if exist "%BIN_DIR%\jira.bat"              (echo   OK: jira.bat)    else (echo   ERROR: jira.bat)
 if exist "%BIN_DIR%\ass.bat"               (echo   OK: ass.bat)     else (echo   ERROR: ass.bat)
+if exist "%BIN_DIR%\dns.bat"               (echo   OK: dns.bat)     else (echo   ERROR: dns.bat)
 if exist "%INSTALL_DIR%\venv\Scripts\python.exe" (echo   OK: virtualenv) else (echo   ERROR: virtualenv)
 echo.
-echo Comandos: jira / noc / ass
+echo Comandos: jira / noc / ass / dns
 echo IMPORTANTE: Abre una NUEVA terminal para usarlos.
 echo.
 pause
