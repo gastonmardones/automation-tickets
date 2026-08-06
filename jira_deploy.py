@@ -35,10 +35,12 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             return 'RC-01'
         if tag_upper in ('HOTFIX', 'FIX'):
             return 'FIX-01'
-        # fallback formato viejo: RC-1, RC-01, etc.
-        match = re.match(r'([A-Z]+)-?(\d+)', tag_upper)
+        # tags numerados: RC-1, RC01, FIX2, HOTFIX3...
+        match = re.match(r'([A-Z]+)-?(\d+)$', tag_upper)
         if match:
             prefijo = match.group(1)
+            if prefijo == 'HOTFIX':
+                prefijo = 'FIX'
             numero = int(match.group(2))
             return f"{prefijo}-{numero:02d}"
         return tag
