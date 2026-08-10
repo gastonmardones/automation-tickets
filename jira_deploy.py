@@ -35,10 +35,12 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             return 'RC-01'
         if tag_upper in ('HOTFIX', 'FIX'):
             return 'FIX-01'
-        # fallback formato viejo: RC-1, RC-01, etc.
-        match = re.match(r'([A-Z]+)-?(\d+)', tag_upper)
+        # tags numerados: RC-1, RC01, FIX2, HOTFIX3...
+        match = re.match(r'([A-Z]+)-?(\d+)$', tag_upper)
         if match:
             prefijo = match.group(1)
+            if prefijo == 'HOTFIX':
+                prefijo = 'FIX'
             numero = int(match.group(2))
             return f"{prefijo}-{numero:02d}"
         return tag
@@ -439,7 +441,11 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         input_thread.start()
 
         closed.wait()
-        jira_context.close()
+        # Si el usuario cerró el navegador a mano, el contexto ya está cerrado.
+        try:
+            jira_context.close()
+        except Exception:
+            pass
 
 def main():
 
@@ -469,4 +475,8 @@ def main():
         )
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelado.")
+        sys.exit(0)

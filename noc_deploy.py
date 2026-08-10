@@ -4,6 +4,7 @@ import json
 import os
 import atexit
 from git_url_parser import parsear_url_git
+from dns_store import pedir_dns, resolver_dns
 
 # Cargar configuración
 def load_config():
@@ -195,7 +196,11 @@ def crear_ticket_deploy(componente, version, ambiente, url="", fecha=None, hora=
         input_thread.start()
 
         closed.wait()
-        context.close()
+        # Si el usuario cerró el navegador a mano, el contexto ya está cerrado.
+        try:
+            context.close()
+        except Exception:
+            pass
 
 def main():
     import sys
@@ -211,9 +216,12 @@ def main():
         parser.add_argument('fecha', nargs='?', default=None)
         parser.add_argument('hora', nargs='?', default=None)
         args = parser.parse_args()
-        
-        crear_ticket_deploy(args.componente, args.version, args.ambiente, 
-                           args.url, args.fecha, args.hora)
+
+        # Si no pasaron url, se busca el DNS guardado; si la pasaron, queda guardada.
+        url = resolver_dns(args.componente, args.ambiente, args.url)
+
+        crear_ticket_deploy(args.componente, args.version, args.ambiente,
+                           url, args.fecha, args.hora)
     else:
         # Preguntar interactivamente
         git_url = input("URL git (Enter para omitir): ").strip()
@@ -234,7 +242,7 @@ def main():
         while ambiente not in ['dev', 'qa', 'hml', 'prd']:
             print("Ambiente inválido. Usá: qa, hml o prd")
             ambiente = input("Ambiente: ").strip().lower()
-        url = input("URL del componente (DNS, opcional, Enter para omitir): ").strip()
+        url = pedir_dns(componente, ambiente)
         fecha = input("Fecha del deploy (ej: 13/11, Enter para omitir): ").strip()
         hora = None
         if fecha:
@@ -250,4 +258,8 @@ def main():
         )
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelado.")
+        sys.exit(0)

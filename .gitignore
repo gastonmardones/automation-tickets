@@ -28,6 +28,9 @@ ENV/
 # Config local (usar config.example.json como plantilla)
 config.json
 
+# Base local de DNS
+dns.db
+
 # Sesiones guardadas
 *_auth_state.json
 noc_auth_state.json
