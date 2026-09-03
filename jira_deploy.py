@@ -306,73 +306,73 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
         jira_page.locator('#summary-field').click()
         jira_page.locator('#summary-field').fill(resumen)
 
-        # === Modal recordatorio para completar el componente manualmente ===
-        # Se inyecta acá (temprano) para que quede a la vista mientras el
-        # resto de los campos se llenan solos; el script recién bloquea
-        # esperando que se cierre al final, después de intentar todo lo demás.
-        jira_page.evaluate("""
-        () => {
-            if (document.getElementById('modal-recordatorio')) return;
+        def mostrar_modal_recordatorio():
+            """Inyecta un modal bloqueante avisando que falta seleccionar el
+            componente a mano. Se llama recién si el autocompletado de
+            Componentes no encontró un match exacto."""
+            jira_page.evaluate("""
+            () => {
+                if (document.getElementById('modal-recordatorio')) return;
 
-            const overlay = document.createElement('div');
-            overlay.id = 'modal-recordatorio';
-            overlay.style.position = 'fixed';
-            overlay.style.top = '0';
-            overlay.style.left = '0';
-            overlay.style.width = '100vw';
-            overlay.style.height = '100vh';
-            overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-            overlay.style.display = 'flex';
-            overlay.style.alignItems = 'center';
-            overlay.style.justifyContent = 'center';
-            overlay.style.zIndex = '999999';
+                const overlay = document.createElement('div');
+                overlay.id = 'modal-recordatorio';
+                overlay.style.position = 'fixed';
+                overlay.style.top = '0';
+                overlay.style.left = '0';
+                overlay.style.width = '100vw';
+                overlay.style.height = '100vh';
+                overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                overlay.style.display = 'flex';
+                overlay.style.alignItems = 'center';
+                overlay.style.justifyContent = 'center';
+                overlay.style.zIndex = '999999';
 
-            const modal = document.createElement('div');
-            modal.style.background = 'white';
-            modal.style.borderRadius = '10px';
-            modal.style.boxShadow = '0 6px 20px rgba(0,0,0,0.25)';
-            modal.style.padding = '20px 28px';
-            modal.style.maxWidth = '320px';
-            modal.style.textAlign = 'center';
-            modal.style.fontFamily = 'system-ui, sans-serif';
-            modal.style.animation = 'fadeIn 0.3s ease';
+                const modal = document.createElement('div');
+                modal.style.background = 'white';
+                modal.style.borderRadius = '10px';
+                modal.style.boxShadow = '0 6px 20px rgba(0,0,0,0.25)';
+                modal.style.padding = '20px 28px';
+                modal.style.maxWidth = '320px';
+                modal.style.textAlign = 'center';
+                modal.style.fontFamily = 'system-ui, sans-serif';
+                modal.style.animation = 'fadeIn 0.3s ease';
 
-            modal.innerHTML = `
-                <p style="font-size:15px; color:#333; margin-bottom:16px; line-height:1.4;">
-                No te olvides de seleccionar<br>
-                el <strong>componente</strong>.
-                </p>
-                <button id="cerrar-modal-recordatorio" style="
-                background:#2d6cdf;
-                color:white;
-                border:none;
-                border-radius:6px;
-                padding:8px 16px;
-                font-size:14px;
-                cursor:pointer;
-                transition:background 0.2s ease;
-                ">OK</button>
-            `;
+                modal.innerHTML = `
+                    <p style="font-size:15px; color:#333; margin-bottom:16px; line-height:1.4;">
+                    No te olvides de seleccionar<br>
+                    el <strong>componente</strong>.
+                    </p>
+                    <button id="cerrar-modal-recordatorio" style="
+                    background:#2d6cdf;
+                    color:white;
+                    border:none;
+                    border-radius:6px;
+                    padding:8px 16px;
+                    font-size:14px;
+                    cursor:pointer;
+                    transition:background 0.2s ease;
+                    ">OK</button>
+                `;
 
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
 
-            document.getElementById('cerrar-modal-recordatorio').addEventListener('click', () => {
-                overlay.style.transition = 'opacity 0.3s ease';
-                overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 300);
-            });
+                document.getElementById('cerrar-modal-recordatorio').addEventListener('click', () => {
+                    overlay.style.transition = 'opacity 0.3s ease';
+                    overlay.style.opacity = '0';
+                    setTimeout(() => overlay.remove(), 300);
+                });
 
-            const style = document.createElement('style');
-            style.innerHTML = `
-                @keyframes fadeIn {
-                from { transform: scale(0.9); opacity: 0; }
-                to { transform: scale(1); opacity: 1; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        """)
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    @keyframes fadeIn {
+                    from { transform: scale(0.9); opacity: 0; }
+                    to { transform: scale(1); opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            """)
 
         # === Descripción (editor ProseMirror/ADF) ===
         try:
@@ -394,47 +394,73 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                 input_field.wait_for(timeout=timeout)
             return input_field
 
+        # === Componentes ===
+        # El dropdown ofrece opciones reales filtradas por texto (no hay
+        # botón de "crear" acá, los componentes son fijos por proyecto).
+        # Solo se selecciona si hay un match exacto, para no arriesgar
+        # elegir un componente parecido pero distinto. Si no se pudo
+        # completar, se muestra el modal recordatorio para hacerlo a mano.
+        componente_completado = False
+        if componente:
+            try:
+                expandir_campo('components')
+                jira_page.locator('#components-field').click()
+                jira_page.locator('#components-field').fill(componente)
+                jira_page.wait_for_selector('[role="listbox"]', timeout=3000)
+
+                opcion_componente = jira_page.locator('[role="option"]').filter(has_text=componente).first
+                if opcion_componente.count() > 0 and opcion_componente.inner_text().strip() == componente:
+                    opcion_componente.click()
+                    componente_completado = True
+                else:
+                    print(f"Componente '{componente}' no tiene coincidencia exacta en Jira. "
+                          "Dejando el campo vacío, seleccionalo a mano.")
+                    if jira_page.locator('[role="listbox"]').count() > 0:
+                        jira_page.keyboard.press('Escape')
+            except Exception as e:
+                print(f"No se pudo seleccionar el Componente automáticamente: {e}")
+
+        if not componente_completado:
+            mostrar_modal_recordatorio()
+
         # === Fix Version ===
         try:
-            print(f"[Fix Version] expandiendo campo, buscando '{version}'...")
             expandir_campo('fixVersions')
             campo_version = jira_page.locator('#fixVersions-field')
-            print(f"[Fix Version] input existe: {campo_version.count() > 0}")
             campo_version.click()
             campo_version.fill(version)
-            jira_page.wait_for_selector('[role="option"], [role="listbox"]', timeout=3000)
+            jira_page.wait_for_selector('[role="listbox"]', timeout=3000)
 
-            opciones = jira_page.locator('[role="option"]')
-            print(f"[Fix Version] opciones encontradas: {opciones.count()} -> "
-                  f"{[opciones.nth(i).inner_text().strip() for i in range(min(opciones.count(), 6))]}")
+            # El footer "Crear nueva versión" es un elemento hermano de las
+            # opciones (data-testid dedicado), no una opción más del listbox
+            # ni tiene role="option" — por eso no se puede buscar por texto
+            # dentro de [role="option"].
+            boton_crear = jira_page.get_by_test_id("issue-field-versions.ui.edit.version-footer")
 
-            # El botón "Crear versión <valor>" siempre aparece en el footer del
-            # dropdown, exista o no la versión. Primero se busca una opción
-            # existente cuyo texto coincida exactamente.
-            opcion_existente = opciones.filter(has_text=version).first
+            # Opción existente: cualquier [role="option"] que no sea el
+            # mensaje "No options" y cuyo texto coincida exactamente.
+            opcion_existente = jira_page.locator('[role="option"]').filter(has_text=version).first
 
             if opcion_existente.count() > 0 and opcion_existente.inner_text().strip() == version:
-                print("[Fix Version] rama: opción existente encontrada, clickeando.")
                 opcion_existente.click()
-            else:
-                # No existe: intentar crearla desde el propio dropdown. El
-                # botón de crear queda identificado por su texto ("Crear
-                # versión ..." / "Create version ...") dentro de las opciones.
-                boton_crear = opciones.filter(has_text=re.compile(r'[Cc]rear|[Cc]reate')).first
+            elif boton_crear.count() > 0:
+                boton_crear.click()
+                jira_page.wait_for_timeout(500)
 
-                if boton_crear.count() > 0:
-                    print("[Fix Version] rama: botón 'crear versión' encontrado, clickeando.")
-                    boton_crear.click()
+                # Diagnóstico: todavía no confirmamos si clickear "Crear
+                # nueva versión" abre un modal aparte o agrega una fila
+                # editable inline dentro del mismo dropdown (patrón típico
+                # de react-select). Se prueban ambos caminos.
+                modal_version = jira_page.get_by_role("dialog").filter(has_text=re.compile(r'[Vv]ersi[oó]n|[Vv]ersion'))
+                hay_modal = modal_version.count() > 0
+                print(f"[Fix Version] tras click en 'Crear nueva versión' -> ¿modal aparte?: {hay_modal}")
+                if not hay_modal:
+                    print(f"[Fix Version] estado del listbox: "
+                          f"{jira_page.locator('[role=\"listbox\"]').first.inner_html()[:800]}")
 
-                    # Si el usuario tiene permiso, se abre un modal aparte para
-                    # confirmar los datos de la nueva versión. Si no tiene
-                    # permiso, Jira no abre nada (o muestra un mensaje de error
-                    # inline) y hay que dejar de esperar rápido para no colgar
-                    # el script.
-                    modal_version = jira_page.get_by_role("dialog").filter(has_text=re.compile(r'[Vv]ersi[oó]n|[Vv]ersion'))
-                    try:
+                try:
+                    if hay_modal:
                         modal_version.wait_for(timeout=4000)
-                        print("[Fix Version] modal de crear versión detectado.")
 
                         campo_nombre = modal_version.locator('input').first
                         if campo_nombre.count() > 0 and not (campo_nombre.input_value() or '').strip():
@@ -445,25 +471,29 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                         ).first
                         boton_confirmar.click(timeout=3000)
                         modal_version.wait_for(state='detached', timeout=5000)
-                        print(f"[Fix Version] versión '{version}' creada.")
-                    except Exception as e_modal:
-                        # Sin permiso para crear versión (o el modal no apareció
-                        # a tiempo): no bloquear el resto del ticket. Solo se
-                        # cierra el dropdown si sigue abierto; no se toca el
-                        # campo si ya quedó vacío, para no arriesgar que un
-                        # Escape de más lo recolapse.
-                        print(f"[Fix Version] rama: sin permiso o modal no apareció ({e_modal}). "
-                              f"Dejando el campo vacío.")
-                        if jira_page.locator('[role="listbox"]').count() > 0:
-                            jira_page.keyboard.press('Escape')
-                else:
-                    print(f"[Fix Version] rama: versión '{version}' no existe y no hay botón de crear. "
-                          "Dejando el campo vacío.")
+                        print(f"Versión '{version}' creada (vía modal).")
+                    else:
+                        # Fila inline: buscar un input editable dentro del
+                        # propio listbox y, si existe, confirmar con Enter.
+                        input_inline = jira_page.locator('[role="listbox"] input').first
+                        if input_inline.count() > 0:
+                            if not (input_inline.input_value() or '').strip():
+                                input_inline.fill(version)
+                            input_inline.press('Enter')
+                            print(f"Versión '{version}' creada (vía fila inline).")
+                        else:
+                            raise Exception("no se encontró modal ni input inline tras 'Crear nueva versión'")
+                except Exception as e_crear:
+                    # Sin permiso para crear versión (o no se pudo completar
+                    # el flujo): no bloquear el resto del ticket.
+                    print(f"Versión '{version}' no existe y no se pudo crear automáticamente "
+                          f"({e_crear}). Dejando el campo vacío.")
                     if jira_page.locator('[role="listbox"]').count() > 0:
                         jira_page.keyboard.press('Escape')
-
-            print(f"[Fix Version] estado final del contenedor: "
-                  f"{jira_page.locator('#fixVersions-container').inner_html()[:300]}")
+            else:
+                print(f"Versión '{version}' no existe en Jira. Dejando el campo vacío.")
+                if jira_page.locator('[role="listbox"]').count() > 0:
+                    jira_page.keyboard.press('Escape')
         except Exception as e:
             print(f"No se pudo seleccionar versión automáticamente: {e}")
 
@@ -513,10 +543,13 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             except Exception as e:
                 print(f"No se pudo llenar URL GIT: {e}")
 
-        # El modal recordatorio ya se inyectó justo después del Resumen; acá
-        # solo se bloquea esperando a que el usuario lo cierre, una vez
-        # intentado el resto de los campos automáticos.
-        jira_page.wait_for_selector('#modal-recordatorio', state='detached', timeout=300000)
+        # El modal recordatorio (si el Componente no se pudo autocompletar)
+        # ya se inyectó al intentar llenar Componentes; acá solo se bloquea
+        # esperando a que el usuario lo cierre, una vez intentado el resto
+        # de los campos automáticos. Si el componente sí se completó solo,
+        # el modal nunca se creó y no hay nada que esperar.
+        if jira_page.locator('#modal-recordatorio').count() > 0:
+            jira_page.wait_for_selector('#modal-recordatorio', state='detached', timeout=300000)
 
         print("\n[Cerrá el navegador o presioná Enter para finalizar...]")
 
