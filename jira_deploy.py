@@ -278,10 +278,26 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             jira_context.close()
             return
 
-        # === Tipo de incidencia (fijo) ===
+        # Esperar a que el formulario termine de montarse (los campos debajo
+        # del summary siguen apareciendo un rato después) antes de tocar
+        # nada; si no, los primeros .click()/.fill() pisan re-renders del
+        # formulario y quedan esperando con el timeout default de 30s.
+        # Se ancla al <form> del creador de issues (id genérico del
+        # componente de Jira, no un customfield de este proyecto) en vez de
+        # un campo puntual, para no depender de ids que cambian si se
+        # reconfiguran los customfields.
         try:
-            jira_page.locator('[id^="type-picker-"]').click()
-            jira_page.get_by_role("option", name=TIPO_INCIDENCIA).click()
+            jira_page.locator('[id="issue-create.ui.modal.create-form"]').wait_for(timeout=15000)
+        except Exception:
+            pass
+
+        # === Tipo de incidencia (ya viene fijo por el dashboard; solo forzar
+        # si por algún motivo no coincide con TIPO_INCIDENCIA) ===
+        try:
+            type_picker = jira_page.locator('[id^="type-picker-"]')
+            if type_picker.count() > 0 and TIPO_INCIDENCIA not in (type_picker.inner_text(timeout=2000) or ''):
+                type_picker.click()
+                jira_page.get_by_role("option", name=TIPO_INCIDENCIA).click(timeout=5000)
         except Exception as e:
             print(f"No se pudo seleccionar el Tipo de Incidencia automáticamente: {e}")
 
@@ -303,17 +319,53 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             jira_page.locator('#fixVersions-field').fill(version)
             jira_page.wait_for_selector('[role="option"], [role="listbox"]', timeout=3000)
 
-            # El botón "Crear nueva versión" siempre aparece en el footer del
-            # dropdown, exista o no la versión. Solo seleccionar si hay una
-            # opción existente cuyo texto coincida exactamente; si no, dejar vacío.
+            # El botón "Crear versión <valor>" siempre aparece en el footer del
+            # dropdown, exista o no la versión. Primero se busca una opción
+            # existente cuyo texto coincida exactamente.
             opcion_existente = jira_page.locator('[role="option"]').filter(has_text=version).first
 
             if opcion_existente.count() > 0 and opcion_existente.inner_text().strip() == version:
                 opcion_existente.click()
             else:
-                print(f"Versión '{version}' no existe en Jira. Dejando el campo vacío.")
-                jira_page.locator('#fixVersions-field').clear()
-                jira_page.keyboard.press('Escape')
+                # No existe: intentar crearla desde el propio dropdown. El
+                # botón de crear queda identificado por su texto ("Crear
+                # versión ..." / "Create version ...") dentro de las opciones.
+                boton_crear = jira_page.locator('[role="option"]').filter(has_text=re.compile(r'[Cc]rear|[Cc]reate')).first
+
+                if boton_crear.count() > 0:
+                    boton_crear.click()
+
+                    # Si el usuario tiene permiso, se abre un modal aparte para
+                    # confirmar los datos de la nueva versión. Si no tiene
+                    # permiso, Jira no abre nada (o muestra un mensaje de error
+                    # inline) y hay que dejar de esperar rápido para no colgar
+                    # el script.
+                    modal_version = jira_page.get_by_role("dialog").filter(has_text=re.compile(r'[Vv]ersi[oó]n|[Vv]ersion'))
+                    try:
+                        modal_version.wait_for(timeout=4000)
+
+                        campo_nombre = modal_version.locator('input').first
+                        if campo_nombre.count() > 0 and not (campo_nombre.input_value() or '').strip():
+                            campo_nombre.fill(version)
+
+                        boton_confirmar = modal_version.get_by_role(
+                            "button", name=re.compile(r'[Cc]rear|[Cc]reate|[Aa]gregar|[Aa]dd')
+                        ).first
+                        boton_confirmar.click(timeout=3000)
+                        modal_version.wait_for(state='detached', timeout=5000)
+                        print(f"Versión '{version}' creada.")
+                    except Exception:
+                        # Sin permiso para crear versión (o el modal no apareció
+                        # a tiempo): no bloquear el resto del ticket.
+                        print(f"Versión '{version}' no existe y no se pudo crear automáticamente "
+                              "(sin permiso o el modal no apareció). Dejando el campo vacío.")
+                        jira_page.locator('#fixVersions-field').click()
+                        jira_page.locator('#fixVersions-field').clear()
+                        jira_page.keyboard.press('Escape')
+                else:
+                    print(f"Versión '{version}' no existe en Jira. Dejando el campo vacío.")
+                    jira_page.locator('#fixVersions-field').clear()
+                    jira_page.keyboard.press('Escape')
         except Exception as e:
             print(f"No se pudo seleccionar versión automáticamente: {e}")
 
@@ -328,18 +380,34 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
             print(f"No se pudo seleccionar el Tag '{tag_normalizado}' automáticamente: {e}")
 
         # === Responsable Referente (customfield_10096, fabric-user-picker) ===
+        # Jira suele precargarlo con el usuario logueado por default. Si ya
+        # tiene un valor, no lo tocamos; solo se completa si está vacío.
         try:
-            jira_page.locator('#customfield_10096-field').click()
-            jira_page.locator('#customfield_10096-field').fill(config['jira_responsable'])
-            jira_page.wait_for_selector('[role="option"]', timeout=5000)
-            jira_page.get_by_role("option").first.click()
+            responsable_container = jira_page.locator('#customfield_10096-container')
+            ya_tiene_valor = responsable_container.locator('[data-vc="avatar-image"], img').count() > 0
+
+            if not ya_tiene_valor:
+                jira_page.locator('#customfield_10096-field').click()
+                jira_page.locator('#customfield_10096-field').fill(config['jira_responsable'])
+                jira_page.wait_for_selector('[role="option"]', timeout=5000)
+                jira_page.get_by_role("option").first.click()
         except Exception as e:
             print(f"No se pudo completar Responsable Referente automáticamente: {e}")
 
-        # === Nro Ticket ME (customfield_10099, input numérico simple) ===
+        # === Nro Ticket ME (customfield_10099) ===
+        # El campo arranca en modo "solo lectura" (un <span> dentro del
+        # contenedor); hay que clickear el contenedor para que Jira lo
+        # transforme en un <input> editable, y recién ahí completar.
         try:
-            jira_page.locator('#customfield_10099-field').click()
-            jira_page.locator('#customfield_10099-field').fill(ticket_noc)
+            campo_noc = jira_page.locator('#customfield_10099-field')
+            if campo_noc.count() == 0 or campo_noc.evaluate("el => el.tagName") != 'INPUT':
+                jira_page.locator('#customfield_10099-container').click()
+                jira_page.locator('#customfield_10099-field').wait_for(timeout=3000)
+                campo_noc = jira_page.locator('#customfield_10099-field')
+
+            campo_noc.click()
+            campo_noc.fill(ticket_noc)
+            jira_page.keyboard.press('Tab')
         except Exception as e:
             print(f"No se pudo completar Nro Ticket ME automáticamente: {e}")
 
