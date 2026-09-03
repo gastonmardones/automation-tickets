@@ -396,25 +396,34 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
 
         # === Fix Version ===
         try:
+            print(f"[Fix Version] expandiendo campo, buscando '{version}'...")
             expandir_campo('fixVersions')
-            jira_page.locator('#fixVersions-field').click()
-            jira_page.locator('#fixVersions-field').fill(version)
+            campo_version = jira_page.locator('#fixVersions-field')
+            print(f"[Fix Version] input existe: {campo_version.count() > 0}")
+            campo_version.click()
+            campo_version.fill(version)
             jira_page.wait_for_selector('[role="option"], [role="listbox"]', timeout=3000)
+
+            opciones = jira_page.locator('[role="option"]')
+            print(f"[Fix Version] opciones encontradas: {opciones.count()} -> "
+                  f"{[opciones.nth(i).inner_text().strip() for i in range(min(opciones.count(), 6))]}")
 
             # El botón "Crear versión <valor>" siempre aparece en el footer del
             # dropdown, exista o no la versión. Primero se busca una opción
             # existente cuyo texto coincida exactamente.
-            opcion_existente = jira_page.locator('[role="option"]').filter(has_text=version).first
+            opcion_existente = opciones.filter(has_text=version).first
 
             if opcion_existente.count() > 0 and opcion_existente.inner_text().strip() == version:
+                print("[Fix Version] rama: opción existente encontrada, clickeando.")
                 opcion_existente.click()
             else:
                 # No existe: intentar crearla desde el propio dropdown. El
                 # botón de crear queda identificado por su texto ("Crear
                 # versión ..." / "Create version ...") dentro de las opciones.
-                boton_crear = jira_page.locator('[role="option"]').filter(has_text=re.compile(r'[Cc]rear|[Cc]reate')).first
+                boton_crear = opciones.filter(has_text=re.compile(r'[Cc]rear|[Cc]reate')).first
 
                 if boton_crear.count() > 0:
+                    print("[Fix Version] rama: botón 'crear versión' encontrado, clickeando.")
                     boton_crear.click()
 
                     # Si el usuario tiene permiso, se abre un modal aparte para
@@ -425,6 +434,7 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                     modal_version = jira_page.get_by_role("dialog").filter(has_text=re.compile(r'[Vv]ersi[oó]n|[Vv]ersion'))
                     try:
                         modal_version.wait_for(timeout=4000)
+                        print("[Fix Version] modal de crear versión detectado.")
 
                         campo_nombre = modal_version.locator('input').first
                         if campo_nombre.count() > 0 and not (campo_nombre.input_value() or '').strip():
@@ -435,19 +445,25 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                         ).first
                         boton_confirmar.click(timeout=3000)
                         modal_version.wait_for(state='detached', timeout=5000)
-                        print(f"Versión '{version}' creada.")
-                    except Exception:
+                        print(f"[Fix Version] versión '{version}' creada.")
+                    except Exception as e_modal:
                         # Sin permiso para crear versión (o el modal no apareció
-                        # a tiempo): no bloquear el resto del ticket.
-                        print(f"Versión '{version}' no existe y no se pudo crear automáticamente "
-                              "(sin permiso o el modal no apareció). Dejando el campo vacío.")
-                        jira_page.locator('#fixVersions-field').click()
-                        jira_page.locator('#fixVersions-field').clear()
-                        jira_page.keyboard.press('Escape')
+                        # a tiempo): no bloquear el resto del ticket. Solo se
+                        # cierra el dropdown si sigue abierto; no se toca el
+                        # campo si ya quedó vacío, para no arriesgar que un
+                        # Escape de más lo recolapse.
+                        print(f"[Fix Version] rama: sin permiso o modal no apareció ({e_modal}). "
+                              f"Dejando el campo vacío.")
+                        if jira_page.locator('[role="listbox"]').count() > 0:
+                            jira_page.keyboard.press('Escape')
                 else:
-                    print(f"Versión '{version}' no existe en Jira. Dejando el campo vacío.")
-                    jira_page.locator('#fixVersions-field').clear()
-                    jira_page.keyboard.press('Escape')
+                    print(f"[Fix Version] rama: versión '{version}' no existe y no hay botón de crear. "
+                          "Dejando el campo vacío.")
+                    if jira_page.locator('[role="listbox"]').count() > 0:
+                        jira_page.keyboard.press('Escape')
+
+            print(f"[Fix Version] estado final del contenedor: "
+                  f"{jira_page.locator('#fixVersions-container').inner_html()[:300]}")
         except Exception as e:
             print(f"No se pudo seleccionar versión automáticamente: {e}")
 
