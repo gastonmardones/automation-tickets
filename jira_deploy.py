@@ -445,50 +445,38 @@ def crear_ticket_jira(componente, version, tag, ticket_noc):
                 opcion_existente.click()
             elif boton_crear.count() > 0:
                 boton_crear.click()
-                jira_page.wait_for_timeout(500)
 
-                # Diagnóstico: todavía no confirmamos si clickear "Crear
-                # nueva versión" abre un modal aparte o agrega una fila
-                # editable inline dentro del mismo dropdown (patrón típico
-                # de react-select). Se prueban ambos caminos.
-                modal_version = jira_page.get_by_role("dialog").filter(has_text=re.compile(r'[Vv]ersi[oó]n|[Vv]ersion'))
-                hay_modal = modal_version.count() > 0
-                print(f"[Fix Version] tras click en 'Crear nueva versión' -> ¿modal aparte?: {hay_modal}")
-                if not hay_modal:
-                    print(f"[Fix Version] estado del listbox: "
-                          f"{jira_page.locator('[role=\"listbox\"]').first.inner_html()[:800]}")
-
+                # Clickear "Crear nueva versión" abre el modal de Jira
+                # Software "Crear publicación" (data-testid dedicado). El
+                # campo de nombre tiene id dinámico (name-_rXX_), por eso se
+                # ubica por su data-testid; el submit es el botón "Create"
+                # (así, en inglés, aunque el resto de la UI esté en español).
+                modal_version = jira_page.get_by_test_id(
+                    "software-releases-release-modals-relay.ui.create-release-modal.modal-dialog"
+                )
                 try:
-                    if hay_modal:
-                        modal_version.wait_for(timeout=4000)
+                    modal_version.wait_for(timeout=4000)
 
-                        campo_nombre = modal_version.locator('input').first
-                        if campo_nombre.count() > 0 and not (campo_nombre.input_value() or '').strip():
-                            campo_nombre.fill(version)
+                    campo_nombre = modal_version.get_by_test_id(
+                        "software-releases-release-modals-relay.common.ui.release-form-fields.name"
+                    )
+                    campo_nombre.fill(version)
 
-                        boton_confirmar = modal_version.get_by_role(
-                            "button", name=re.compile(r'[Cc]rear|[Cc]reate|[Aa]gregar|[Aa]dd')
-                        ).first
-                        boton_confirmar.click(timeout=3000)
-                        modal_version.wait_for(state='detached', timeout=5000)
-                        print(f"Versión '{version}' creada (vía modal).")
-                    else:
-                        # Fila inline: buscar un input editable dentro del
-                        # propio listbox y, si existe, confirmar con Enter.
-                        input_inline = jira_page.locator('[role="listbox"] input').first
-                        if input_inline.count() > 0:
-                            if not (input_inline.input_value() or '').strip():
-                                input_inline.fill(version)
-                            input_inline.press('Enter')
-                            print(f"Versión '{version}' creada (vía fila inline).")
-                        else:
-                            raise Exception("no se encontró modal ni input inline tras 'Crear nueva versión'")
-                except Exception as e_crear:
-                    # Sin permiso para crear versión (o no se pudo completar
-                    # el flujo): no bloquear el resto del ticket.
+                    boton_confirmar = modal_version.get_by_test_id(
+                        "software-releases-release-modals-relay.common.ui.release-form-fields.button"
+                    )
+                    boton_confirmar.click(timeout=3000)
+                    modal_version.wait_for(state='detached', timeout=5000)
+                    print(f"Versión '{version}' creada.")
+                except Exception as e_modal:
+                    # Sin permiso para crear versión (el modal no llega a
+                    # abrirse) o falló el submit: no bloquear el resto del
+                    # ticket.
                     print(f"Versión '{version}' no existe y no se pudo crear automáticamente "
-                          f"({e_crear}). Dejando el campo vacío.")
-                    if jira_page.locator('[role="listbox"]').count() > 0:
+                          f"({e_modal}). Dejando el campo vacío.")
+                    if modal_version.count() > 0:
+                        jira_page.keyboard.press('Escape')
+                    elif jira_page.locator('[role="listbox"]').count() > 0:
                         jira_page.keyboard.press('Escape')
             else:
                 print(f"Versión '{version}' no existe en Jira. Dejando el campo vacío.")
